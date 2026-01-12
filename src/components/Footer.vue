@@ -6,7 +6,7 @@
         <span class="inline-block animate-pulse text-red-500" aria-label="love">❤️</span> 
         by 
         <a 
-          href="https://t.me/EithonX" 
+          href="https://github.com/EithonX" 
           class="font-medium text-blue-600 transition-colors hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
           target="_blank"
           rel="noopener noreferrer"

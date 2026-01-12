@@ -9,7 +9,7 @@ import ManagerDashboard from './components/ManagerDashboard.vue'
 import Footer from './components/Footer.vue'
 
 // Logic
-const API_BASE = "/api/" // Uses Cloudflare Tunnel
+const API_BASE = "/api/"
 const authKey = useStorage('stremio_auth_key', '')
 const step = ref(1)
 const isLoading = ref(false)
@@ -89,10 +89,12 @@ const syncAddons = async () => {
   }
 }
 
+// 4. This is the logout function called by both components
 const logout = () => {
   authKey.value = null
   addons.value = []
   step.value = 1
+  notify('success', 'Disconnected successfully')
 }
 
 onMounted(() => {
@@ -121,7 +123,8 @@ onMounted(() => {
         :isLoading="isLoading" 
         @update:addons="addons = $event" 
         @sync="syncAddons" 
-        @remove="addons.splice($event, 1)" 
+        @remove="addons.splice($event, 1)"
+        @logout="logout" 
       />
     </main>
 

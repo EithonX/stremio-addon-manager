@@ -1,0 +1,30 @@
+<script setup>
+import { ref, watch } from 'vue'
+
+const props = defineProps(['src', 'alt'])
+const hasError = ref(false)
+const fallback = 'https://www.stremio.com/website/favicon.ico'
+
+// If the source prop changes (rare), reset error state
+watch(() => props.src, () => {
+  hasError.value = false
+})
+</script>
+
+<template>
+  <div class="shrink-0 relative">
+    <img 
+      v-if="!hasError"
+      :src="src || fallback" 
+      :alt="alt"
+      class="w-10 h-10 md:w-12 md:h-12 rounded-lg object-contain bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 p-1"
+      @error="hasError = true"
+    />
+    <img 
+      v-else
+      :src="fallback" 
+      :alt="alt"
+      class="w-10 h-10 md:w-12 md:h-12 rounded-lg object-contain bg-zinc-50 dark:bg-black border border-zinc-200 dark:border-zinc-800 p-1 opacity-50 grayscale"
+    />
+  </div>
+</template>

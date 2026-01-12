@@ -5,7 +5,7 @@
 @layer base {
   body {
     @apply antialiased font-sans transition-colors duration-300;
-    @apply bg-zinc-50 text-zinc-900 text-base md:text-lg leading-relaxed;
+    @apply bg-zinc-50 text-zinc-900 text-sm md:text-base leading-relaxed;
   }
   .dark body {
     @apply bg-zinc-950 text-zinc-100;
@@ -14,27 +14,31 @@
 
 @layer components {
   .card-base {
-    @apply bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors;
+    @apply bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors;
   }
 
   .input-field {
-    @apply w-full h-12 md:h-14 px-5 rounded-xl bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 
+    @apply w-full h-12 px-4 rounded-lg bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 
     text-zinc-900 dark:text-zinc-100 placeholder-zinc-500 outline-none transition-all
-    focus:ring-2 focus:ring-blue-600 focus:border-transparent text-base md:text-lg;
+    focus:ring-2 focus:ring-blue-600 focus:border-transparent text-sm md:text-base;
   }
 
   .btn-primary {
-    @apply h-12 md:h-14 px-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base md:text-lg shadow-md shadow-blue-600/10
-    active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3;
+    @apply h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm md:text-base shadow-sm
+    active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
+  }
+
+  /* This single class handles the 'ghost' state (the item being dragged) */
+  .sortable-ghost {
+    @apply bg-blue-50 dark:bg-blue-900/30 border border-blue-500/30 dark:border-blue-500/50 opacity-100 rounded-xl;
+  }
+  
+  .sortable-drag {
+    @apply opacity-0; 
   }
 }
 
 @layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }

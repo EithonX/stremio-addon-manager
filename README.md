@@ -48,7 +48,7 @@ Stremio natively locks addons in the order of installation. To move a catalog up
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/EithonX/stremio-addon-manager.git
-   cd stremio-addon-manager-2.0
+   cd stremio-addon-manager
    ```
 
 2. **Install dependencies:**
@@ -117,7 +117,7 @@ JSON.parse(localStorage.getItem("profile")).auth.key
 2. Type `javascript:` in the URL bar.
 3. Paste this code immediately after and hit Enter:
 ```js
-alert(JSON.parse(localStorage.getItem("profile")).auth.key);
+(t=document.createElement("textarea"),t.value=JSON.parse(localStorage.profile).auth.key,document.body.append(t),t.select(),document.execCommand("copy"),t.remove())
 ```
 ---
 

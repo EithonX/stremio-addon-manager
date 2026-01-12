@@ -1,10 +1,3 @@
-# Devenv
-.devenv*
-devenv.local.nix
-
-# Direnv
-.direnv
-
 # Logs
 logs
 *.log
@@ -14,26 +7,35 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
-.DS_Store
+.pnpm-store
+
+# Build Output (Vite & Cloudflare)
 dist
 dist-ssr
-coverage
-*.local
+.wrangler
 
-/cypress/videos/
-/cypress/screenshots/
+# System Files
+.DS_Store
+Thumbs.db
 
-# Editor directories and files
+# IDEs and Editors
+.idea
 .vscode/*
 !.vscode/extensions.json
-.idea
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-*.tsbuildinfo
-.wrangler
-node_modules
+# Environment Variables (Crucial for security)
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage
+/cypress/videos/
+/cypress/screenshots/

@@ -128,13 +128,13 @@ onMounted(() => {
           <div v-if="activeTab === 'desktop'" class="px-4 pb-4 space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
             <ol class="list-decimal list-inside space-y-2 marker:text-blue-600 marker:font-bold">
               <li>Log into <a href="https://web.stremio.com" target="_blank" class="text-blue-600 underline font-bold">Stremio Web</a>.</li>
-              <li>Press <kbd class="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 font-mono text-xs font-bold">F12</kbd> to open Console.</li>
+              <li>Press <kbd class="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 font-mono text-xs font-bold border border-zinc-300 dark:border-zinc-700">F12</kbd> (or Right Click > Inspect) to open Console.</li>
               <li>Paste this code and hit Enter:</li>
             </ol>
             
             <div class="relative group w-full">
-              <div class="bg-zinc-950 text-zinc-300 p-3 pr-10 rounded-lg font-mono text-xs border border-zinc-800 break-all whitespace-pre-wrap">
-JSON.parse(localStorage.getItem("profile")).auth.key
+              <div class="bg-zinc-950 text-zinc-300 p-3 pr-10 rounded-lg font-mono text-xs border border-zinc-800 overflow-x-auto no-scrollbar whitespace-nowrap shadow-inner">
+                JSON.parse(localStorage.getItem("profile")).auth.key
               </div>
               <button @click="copyToClipboard('JSON.parse(localStorage.getItem(&quot;profile&quot;)).auth.key')" class="absolute right-2 top-2 p-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
                 <Check v-if="copied && source.includes('JSON')" class="w-4 h-4 text-emerald-500" />
@@ -155,11 +155,11 @@ JSON.parse(localStorage.getItem("profile")).auth.key
             </ol>
 
             <div class="relative group w-full">
-              <div class="bg-zinc-950 text-zinc-300 p-3 pr-10 rounded-lg font-mono text-xs border border-zinc-800 break-all whitespace-pre-wrap">
-alert(JSON.parse(localStorage.getItem("profile")).auth.key);
+              <div class="bg-zinc-950 text-zinc-300 p-3 pr-10 rounded-lg font-mono text-xs border border-zinc-800 break-all whitespace-pre-wrap shadow-inner">
+(t=document.createElement("textarea"),t.value=JSON.parse(localStorage.profile).auth.key,document.body.append(t),t.select(),document.execCommand("copy"),t.remove())
               </div>
-               <button @click="copyToClipboard('alert(JSON.parse(localStorage.getItem(&quot;profile&quot;)).auth.key);')" class="absolute right-2 top-2 p-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
-                 <Check v-if="copied && source.includes('alert')" class="w-4 h-4 text-emerald-500" />
+               <button @click="copyToClipboard('(t=document.createElement(&quot;textarea&quot;),t.value=JSON.parse(localStorage.profile).auth.key,document.body.append(t),t.select(),document.execCommand(&quot;copy&quot;),t.remove())')" class="absolute right-2 top-2 p-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+                 <Check v-if="copied && source.includes('textarea')" class="w-4 h-4 text-emerald-500" />
                 <Copy v-else class="w-4 h-4" />
               </button>
             </div>

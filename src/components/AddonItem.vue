@@ -40,7 +40,7 @@ const copyUrl = () => {
     
     <!-- Drag Handle (Desktop) -->
     <div 
-      class="drag-handle sm:self-center p-1 rounded transition-colors hidden sm:block"
+      class="drag-handle touch-none sm:self-center p-1 rounded transition-colors hidden sm:block"
       :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500'"
     >
       <GripVertical class="w-5 h-5" />
@@ -48,7 +48,7 @@ const copyUrl = () => {
 
     <!-- Drag Handle (Mobile) -->
     <div 
-      class="drag-handle self-center p-1 -ml-1 rounded transition-colors sm:hidden"
+      class="drag-handle touch-none self-center p-1 -ml-1 rounded transition-colors sm:hidden"
       :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500'"
     >
       <GripVertical class="w-5 h-5" />

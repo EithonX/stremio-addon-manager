@@ -251,6 +251,7 @@ const restoreConfig = () => {
         ghost-class="sortable-ghost"
         drag-class="sortable-drag"
         class="space-y-4 pb-20"
+        :animation="200"
         @end="$emit('update:addons', addons)"
       >
         <template #item="{ element, index }">

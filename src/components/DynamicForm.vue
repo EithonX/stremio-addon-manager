@@ -587,11 +587,12 @@ async function executeReset() {
             handle=".drag-handle"
             ghost-class="sortable-ghost"
             class="space-y-3"
+            :animation="200"
           >
             <template #item="{ element, index }">
               <div class="group bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex items-center gap-2 md:gap-3 transition-all hover:border-blue-400 dark:hover:border-blue-600">
                 <!-- Drag Handle -->
-                <div class="drag-handle p-2 cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                <div class="drag-handle touch-none p-2 cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
                   <Move class="w-4 h-4" />
                 </div>
                 

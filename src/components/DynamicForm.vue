@@ -23,6 +23,32 @@ const initialManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
 
+const lineCount = computed(() => {
+  return jsonModel.value.split('\n').length
+})
+
+function handleInput(e) {
+  // Sync height of wrapper based on content
+  // Since we use absolute positioning for textarea now, we need to size the parent div.
+  const textarea = e.target
+  const wrapper = textarea.parentElement
+  if(wrapper) {
+      wrapper.style.height = 'auto'
+      wrapper.style.height = textarea.scrollHeight + 'px'
+      
+      // Also sync width for horizontal scroll
+      wrapper.style.width = 'auto'
+      wrapper.style.width = textarea.scrollWidth + 'px'
+  }
+}
+
+/* Scroll Sync not needed if we auto-grow? 
+   Actually if we auto-grow, there is no scroll within the textarea. 
+   The window/modal scrolls. 
+   So we don't need handleScroll anymore. 
+   We just need to make sure the container and pre grow too.
+*/
+
 // Initialize
 watch(() => props.manifest, (newManifest) => {
   const clone = JSON.parse(JSON.stringify(newManifest))
@@ -160,6 +186,34 @@ function deleteCatalog(index) {
 }
 
 // Fix reset logic to properly fetch and parse
+// Basic Syntax Highlighting for JSON
+function highlightJson(json) {
+  if (!json) return ''
+  // Escape HTML
+  const escaped = json
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  // Regex tokens
+  return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+    let cls = 'text-purple-600 dark:text-purple-400' // number
+    if (/^"/.test(match)) {
+      if (/:$/.test(match)) {
+        cls = 'text-blue-600 dark:text-blue-400 font-semibold' // key
+      } else {
+        cls = 'text-green-600 dark:text-green-400' // string
+      }
+    } else if (/true|false/.test(match)) {
+      cls = 'text-orange-600 dark:text-orange-400 font-bold' // boolean
+    } else if (/null/.test(match)) {
+      cls = 'text-red-500 dark:text-red-400 font-bold italic' // null
+    }
+    return '<span class="' + cls + '">' + match + '</span>'
+  })
+}
+
+// Reset Logic
 async function handleReset() {
   if (!confirm('Reset addon to original defaults? All changes will be lost.')) return
   isResetting.value = true
@@ -185,14 +239,10 @@ async function handleReset() {
     syncJsonModel()
     
     // 4. Update initialManifest so "Save" button becomes disabled if it matches original
-    // OR should we consider a reset as a "change" that needs saving?
-    // User wants to "Reset", usually meaning "Revert to factory".
-    // If they save, it overwrites their stored config with factory default.
-    // So yes, we mark it as unsaved changes compared to *current stored state*.
     hasUnsavedChanges.value = true 
 
     // Optional: Auto-save? No, let user confirm via Save button.
-    alert('Reset successful. Click "Save Changes" to apply.')
+    // alert('Reset successful. Click "Save Changes" to apply.')
     
   } catch(e) {
     alert('Failed to reset: ' + e.message)
@@ -226,7 +276,7 @@ async function handleReset() {
          Ideally, the modal body (parent) scrolls, and this form just expands. 
          But we set h-[80vh] on line 189. 
          Let's remove fixed height and let it flow. -->
-    <div class="space-y-6 pt-4 pb-8">
+    <div class="space-y-6 pt-4 pb-32">
       <template v-if="!isAdvancedMode">
         <!-- Basic Info -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -321,37 +371,61 @@ async function handleReset() {
       </template>
 
       <!-- Advanced JSON Editor -->
-      <div v-else class="h-full">
-         <textarea 
-          v-model="jsonModel"
-          class="w-full min-h-[500px] font-mono text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-          spellcheck="false"
-        ></textarea>
+      <div v-else class="flex-1 flex relative font-mono text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden group focus-within:ring-2 focus-within:ring-blue-500 min-h-[500px]">
+         
+         <!-- Line Numbers -->
+         <div class="bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 text-right select-none px-2 py-4 border-r border-zinc-200 dark:border-zinc-700 min-w-[3rem]" aria-hidden="true">
+            <div v-for="n in lineCount" :key="n">{{ n }}</div>
+         </div>
+
+         <!-- Editor Area Container - Need scroll container here -->
+         <div class="relative flex-1 overflow-auto no-scrollbar">
+             <!-- Formatting Wrapper -->
+             <div class="relative min-w-full inline-block min-h-full">
+                 <!-- Highlights Overlay -->
+                 <pre 
+                  aria-hidden="true" 
+                  class="absolute inset-0 p-4 pointer-events-none whitespace-pre text-transparent z-0"
+                  style="font-family: inherit;"
+                  v-html="highlightJson(jsonModel)"
+                 ></pre>
+                 
+                 <!-- Textarea -->
+                 <textarea 
+                  v-model="jsonModel"
+                  class="w-full h-full absolute inset-0 bg-transparent text-transparent caret-zinc-900 dark:caret-white p-4 outline-none resize-none z-10 whitespace-pre overflow-hidden"
+                  style="font-family: inherit;"
+                  spellcheck="false"
+                  @input="handleInput"
+                ></textarea>
+             </div>
+         </div>
       </div>
     </div>
 
     <!-- Footer Actions -->
-    <div class="sticky bottom-0 px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm -mx-6 -mb-6 mt-6 flex justify-between items-center z-10">
+    <div class="sticky bottom-0 px-4 md:px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md -mx-6 -mb-6 mt-6 flex flex-col-reverse md:flex-row justify-between items-center gap-4 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.5)]">
+      
       <button 
         @click="handleReset"
-        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-zinc-600 hover:text-red-600 transition-colors"
+        class="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-zinc-500 hover:text-red-600 transition-colors border border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg"
         :disabled="isResetting"
       >
         <RotateCcw class="w-4 h-4" :class="{ 'animate-spin': isResetting }" />
         {{ isResetting ? 'Resetting...' : 'Reset to Default' }}
       </button>
 
-      <div class="flex gap-3">
+      <div class="flex gap-3 w-full md:w-auto">
         <button 
           @click="$emit('cancel')"
-          class="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+          class="flex-1 md:flex-none px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg"
         >
           Cancel
         </button>
         <button 
           @click="handleSubmit"
           :disabled="!hasUnsavedChanges"
-          class="btn-primary"
+          class="flex-1 md:flex-none btn-primary justify-center"
           :class="{ 'opacity-50 cursor-not-allowed': !hasUnsavedChanges }"
         >
           <Save class="w-4 h-4" />
@@ -363,5 +437,44 @@ async function handleReset() {
 </template>
 
 <style scoped>
-/* Reusing style.css scrollbar */
+textarea {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; /* Nicer coding font if available */
+}
+
+/* Custom Scrollbar for this component */
+/* Only show custom scrollbars on devices with fine pointers (mouse) */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent; 
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-200 dark:bg-zinc-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-300 dark:bg-zinc-600;
+  }
+}
+
+/* Hide scrollbars on touch devices or when explicitly requested */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 </style>

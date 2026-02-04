@@ -4,6 +4,7 @@ import Draggable from 'vuedraggable'
 import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X } from 'lucide-vue-next'
 import AddonFeatures from './AddonFeatures.vue'
 import Modal from './ui/Modal.vue'
+import ConfirmationModal from './ui/ConfirmationModal.vue'
 
 const props = defineProps({
   manifest: { type: Object, required: true },
@@ -23,13 +24,22 @@ const initialManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
 
+// Confirmation State
+const confirmModal = ref({
+  show: false,
+  title: '',
+  message: '',
+  confirmText: 'Confirm',
+  type: 'danger',
+  action: null
+})
+
 const lineCount = computed(() => {
   return jsonModel.value.split('\n').length
 })
 
 function handleInput(e) {
   // Sync height of wrapper based on content
-  // Since we use absolute positioning for textarea now, we need to size the parent div.
   const textarea = e.target
   const wrapper = textarea.parentElement
   if(wrapper) {
@@ -41,13 +51,6 @@ function handleInput(e) {
       wrapper.style.width = textarea.scrollWidth + 'px'
   }
 }
-
-/* Scroll Sync not needed if we auto-grow? 
-   Actually if we auto-grow, there is no scroll within the textarea. 
-   The window/modal scrolls. 
-   So we don't need handleScroll anymore. 
-   We just need to make sure the container and pre grow too.
-*/
 
 // Initialize
 watch(() => props.manifest, (newManifest) => {
@@ -179,13 +182,20 @@ function toggleCatalogVisibility(catalog) {
 }
 
 function deleteCatalog(index) {
-  if (confirm('Delete this catalog?')) {
-    formModel.value.catalogs.splice(index, 1)
-    syncJsonModel()
+  confirmModal.value = {
+    show: true,
+    title: 'Delete Catalog?',
+    message: 'Are you sure you want to delete this catalog? This action cannot be undone.',
+    confirmText: 'Delete',
+    type: 'danger',
+    action: () => {
+      formModel.value.catalogs.splice(index, 1)
+      syncJsonModel()
+      confirmModal.value.show = false
+    }
   }
 }
 
-// Fix reset logic to properly fetch and parse
 // Basic Syntax Highlighting for JSON
 function highlightJson(json) {
   if (!json) return ''
@@ -214,8 +224,19 @@ function highlightJson(json) {
 }
 
 // Reset Logic
-async function handleReset() {
-  if (!confirm('Reset addon to original defaults? All changes will be lost.')) return
+function handleReset() {
+  confirmModal.value = {
+    show: true,
+    title: 'Reset to Default?',
+    message: 'Reset addon to original defaults? All unsaved changes will be lost.',
+    confirmText: 'Reset',
+    type: 'danger',
+    action: executeReset
+  }
+}
+
+async function executeReset() {
+  confirmModal.value.show = false
   isResetting.value = true
   
   try {
@@ -240,9 +261,6 @@ async function handleReset() {
     
     // 4. Update initialManifest so "Save" button becomes disabled if it matches original
     hasUnsavedChanges.value = true 
-
-    // Optional: Auto-save? No, let user confirm via Save button.
-    // alert('Reset successful. Click "Save Changes" to apply.')
     
   } catch(e) {
     alert('Failed to reset: ' + e.message)
@@ -434,6 +452,17 @@ async function handleReset() {
         </button>
       </div>
     </div>
+
+    <!-- Confirmation Modal -->
+    <ConfirmationModal 
+      :show="confirmModal.show"
+      :title="confirmModal.title"
+      :message="confirmModal.message"
+      :confirm-text="confirmModal.confirmText"
+      :type="confirmModal.type"
+      @close="confirmModal.show = false"
+      @confirm="confirmModal.action && confirmModal.action()"
+    />
   </div>
 </template>
 

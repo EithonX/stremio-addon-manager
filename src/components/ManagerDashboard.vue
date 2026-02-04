@@ -5,6 +5,7 @@ import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock } from 'lucide-
 import AddonItem from './AddonItem.vue'
 import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
+import ConfirmationModal from './ui/ConfirmationModal.vue'
 
 const props = defineProps({
   addons: {
@@ -29,6 +30,15 @@ const isLocked = ref(false)
 const currentEditIndex = ref(null)
 const currentEditManifest = ref(null)
 const currentEditURL = ref('')
+
+// Confirmation State
+const confirmModal = ref({
+  show: false,
+  title: '',
+  message: '',
+  confirmText: 'Confirm',
+  action: null
+})
 
 // Computed
 const isSearching = computed(() => searchQuery.value.trim().length > 0)
@@ -126,8 +136,15 @@ const restoreConfig = () => {
       try {
         const data = JSON.parse(e.target.result)
         if (Array.isArray(data.addons)) {
-          if (confirm(`Replace current list with ${data.addons.length} addons from backup?`)) {
-            emit('update:addons', data.addons)
+          confirmModal.value = {
+            show: true,
+            title: 'Restore Backup?',
+            message: `Replace current list with ${data.addons.length} addons from backup? This will overwrite your current list.`,
+            confirmText: 'Restore',
+            action: () => {
+              emit('update:addons', data.addons)
+              confirmModal.value.show = false
+            }
           }
         } else {
           alert('Invalid backup file format.')
@@ -312,6 +329,17 @@ const restoreConfig = () => {
         @cancel="isEditModalOpen = false"
       />
     </Modal>
+
+    <!-- Confirmation Modal -->
+    <ConfirmationModal 
+      :show="confirmModal.show"
+      :title="confirmModal.title"
+      :message="confirmModal.message"
+      :confirm-text="confirmModal.confirmText"
+      type="info"
+      @close="confirmModal.show = false"
+      @confirm="confirmModal.action && confirmModal.action()"
+    />
   </div>
 </template>
 

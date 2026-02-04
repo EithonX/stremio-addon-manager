@@ -8,11 +8,14 @@ import LandingPage from './components/LandingPage.vue'
 import ManagerDashboard from './components/ManagerDashboard.vue'
 import Footer from './components/Footer.vue'
 
+import SkeletonLoader from './components/ui/SkeletonLoader.vue'
+
 // Logic
 const API_BASE = "/api/"
 const authKey = useStorage('stremio_auth_key', '')
 const step = ref(1)
 const isLoading = ref(false)
+const isAuthChecking = ref(true)
 const notification = ref({ show: false, type: '', message: '' })
 const addons = ref([])
 
@@ -38,6 +41,8 @@ const loadAddons = async () => {
     notify('error', e.message)
     authKey.value = null
     step.value = 1
+  } finally {
+    isAuthChecking.value = false
   }
 }
 
@@ -117,7 +122,11 @@ const logout = () => {
 }
 
 onMounted(() => {
-  if (authKey.value) loadAddons()
+  if (authKey.value) {
+    loadAddons()
+  } else {
+    isAuthChecking.value = false
+  }
 })
 </script>
 
@@ -134,17 +143,21 @@ onMounted(() => {
         </div>
       </transition>
 
-      <LandingPage v-if="step === 1" :isLoading="isLoading" @login="login" @loginKey="loginKey" />
-      
-      <ManagerDashboard 
-        v-else 
-        :addons="addons" 
-        :isLoading="isLoading" 
-        @update:addons="addons = $event" 
-        @sync="syncAddons" 
-        @remove="addons.splice($event, 1)"
-        @logout="logout" 
-      />
+      <SkeletonLoader v-if="isAuthChecking" />
+
+      <template v-else>
+        <LandingPage v-if="step === 1" :isLoading="isLoading" @login="login" @loginKey="loginKey" />
+        
+        <ManagerDashboard 
+          v-else 
+          :addons="addons" 
+          :isLoading="isLoading" 
+          @update:addons="addons = $event" 
+          @sync="syncAddons" 
+          @remove="addons.splice($event, 1)"
+          @logout="logout" 
+        />
+      </template>
     </main>
 
     <Footer />

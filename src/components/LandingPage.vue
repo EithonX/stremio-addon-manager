@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { ArrowRight, Loader2, Key, HelpCircle, Smartphone, Monitor, Info, Shield, Copy, Check, AlertTriangle } from 'lucide-vue-next'
 import { useClipboard, useWindowSize } from '@vueuse/core'
+import SavedAccounts from './SavedAccounts.vue'
 
 defineProps(['isLoading'])
 const emit = defineEmits(['login', 'loginKey'])
@@ -19,7 +20,23 @@ const copyToClipboard = (text) => {
   copy()
 }
 
-const handleLogin = () => emit('login', { email: email.value, password: password.value })
+const savedAccountsRef = ref(null)
+
+const handleAccountSelect = (account) => {
+  email.value = account.email || ''
+  password.value = account.password || ''
+  if (account.authKey) {
+    // If we have an authKey, we can auto-login or just prefill
+    // For now, let's just emit if the user clicks "Connect"
+    // Or we could trigger it automatically? Let's wait for explicit action.
+  }
+}
+
+const handleLogin = () => {
+  emit('login', { email: email.value, password: password.value })
+  // We can save the account on successful login in App.vue, but we can also trigger a save here if we want optimistic updates
+  // But strictly speaking App.vue handles the logic.
+}
 
 // Auto-select tab based on screen size
 onMounted(() => {
@@ -49,13 +66,19 @@ onMounted(() => {
         </div>
         
         <form @submit.prevent="handleLogin" class="space-y-4">
+          <SavedAccounts 
+            ref="savedAccountsRef" 
+            @selected="handleAccountSelect" 
+            class="mb-4"
+          />
+
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Email</label>
             <input v-model="email" type="email" class="input-field" placeholder="name@example.com" required />
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Password</label>
-            <input v-model="password" type="password" class="input-field" placeholder="••••••••" required />
+            <input v-model="password" type="password" class="input-field" placeholder="••••••••" />
           </div>
           <button type="submit" :disabled="isLoading" class="btn-primary w-full mt-2">
             <Loader2 v-if="isLoading" class="w-5 h-5 animate-spin" />

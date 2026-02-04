@@ -51,6 +51,25 @@ const login = async ({ email, password }) => {
     const data = await res.json()
     if (data.result?.authKey) {
       authKey.value = data.result.authKey
+      // Persist to SavedAccounts
+      // We need to access SavedAccounts but it's inside LandingPage. 
+      // Better way: App.vue manages this or LandingPage handles it.
+      // Since LandingPage is unmounted on success, we should save BEFORE emitting or App.vue handles it.
+      // Let's modify App.vue to save to localStorage manually OR use a global store.
+      // Actually, SavedAccounts uses useStorage internally, so we can just update that storage key!
+      const saved = JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]')
+      const idx = saved.findIndex(a => a.email === email)
+      const newAcc = { 
+        email, 
+        password: password || '', // Only save password if provided
+        authKey: data.result.authKey, 
+        label: idx >= 0 ? saved[idx].label : email,
+        updatedAt: Date.now() 
+      }
+      if (idx >= 0) saved[idx] = { ...saved[idx], ...newAcc }
+      else saved.push(newAcc)
+      localStorage.setItem('sam_saved_accounts', JSON.stringify(saved))
+      
       await loadAddons()
     } else {
       throw new Error(data.error?.message || "Invalid credentials")

@@ -157,7 +157,7 @@ const restoreConfig = () => {
         <input 
           v-model="searchQuery" 
           placeholder="Search addons..." 
-          class="input-field pl-10 h-10 text-sm w-full"
+          class="input-field pl-10 h-9 md:h-10 text-sm w-full"
         />
       </div>
 
@@ -167,7 +167,7 @@ const restoreConfig = () => {
         <!-- Add Button -->
         <button 
           @click="openAddModal" 
-          class="btn-primary h-10 px-4 text-sm whitespace-nowrap bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 dark:hover:bg-zinc-600 shadow-md flex-shrink-0" 
+          class="btn-primary h-9 md:h-10 px-3 md:px-4 text-sm whitespace-nowrap bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 dark:hover:bg-zinc-600 shadow-md flex-shrink-0" 
           title="Add New Addon"
         >
           <Plus class="w-4 h-4" />
@@ -180,7 +180,7 @@ const restoreConfig = () => {
         <div class="flex items-center gap-1 flex-shrink-0">
            <button 
              @click="isLocked = !isLocked" 
-             class="p-2 rounded-lg transition-colors border flex-shrink-0"
+             class="p-1.5 md:p-2 rounded-lg transition-colors border flex-shrink-0"
              :class="isLocked ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'text-zinc-500 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'"
              :title="isLocked ? 'Unlock Reordering' : 'Lock Reordering'"
            >
@@ -188,10 +188,10 @@ const restoreConfig = () => {
             <Unlock v-else class="w-5 h-5" />
           </button>
 
-           <button @click="backupConfig" class="p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Backup Configuration">
+           <button @click="backupConfig" class="p-1.5 md:p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Backup Configuration">
             <Download class="w-5 h-5" />
           </button>
-          <button @click="restoreConfig" class="p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Restore Configuration">
+          <button @click="restoreConfig" class="p-1.5 md:p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Restore Configuration">
             <Upload class="w-5 h-5" />
           </button>
         </div>
@@ -200,7 +200,7 @@ const restoreConfig = () => {
 
         <button 
           @click="$emit('sync')" 
-          class="btn-primary h-10 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex-shrink-0" 
+          class="btn-primary h-9 md:h-10 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex-shrink-0" 
           :disabled="isLoading"
         >
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
@@ -302,6 +302,7 @@ const restoreConfig = () => {
       @close="isEditModalOpen = false" 
       max-width="max-w-4xl"
       title="Edit Addon"
+      no-padding
     >
       <DynamicForm 
         v-if="currentEditManifest"

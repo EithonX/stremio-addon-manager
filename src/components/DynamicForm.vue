@@ -255,7 +255,7 @@ async function handleReset() {
 
 <template>
   <div class="flex flex-col">
-    <div class="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
+    <div class="px-4 md:px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
       <h3 class="text-xl font-semibold text-zinc-900 dark:text-white truncate pr-4">
         Edit {{ formModel.name || 'Addon' }}
       </h3>
@@ -276,7 +276,7 @@ async function handleReset() {
          Ideally, the modal body (parent) scrolls, and this form just expands. 
          But we set h-[80vh] on line 189. 
          Let's remove fixed height and let it flow. -->
-    <div class="space-y-6 pt-4 pb-32">
+    <div class="space-y-6 px-4 md:px-6 pt-4 pb-6">
       <template v-if="!isAdvancedMode">
         <!-- Basic Info -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -320,7 +320,7 @@ async function handleReset() {
             class="space-y-3"
           >
             <template #item="{ element, index }">
-              <div class="group bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex items-center gap-3 transition-all hover:border-blue-400 dark:hover:border-blue-600">
+              <div class="group bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex items-center gap-2 md:gap-3 transition-all hover:border-blue-400 dark:hover:border-blue-600">
                 <!-- Drag Handle -->
                 <div class="drag-handle p-2 cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
                   <Move class="w-4 h-4" />
@@ -341,14 +341,14 @@ async function handleReset() {
                 </div>
 
                 <!-- Type Badge -->
-                <span class="px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-xs font-mono text-zinc-500 font-medium w-16 text-center shrink-0">
+                <span class="px-1.5 md:px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[10px] md:text-xs font-mono text-zinc-500 font-medium w-auto text-center shrink-0">
                   {{ element.type }}
                 </span>
 
                 <!-- Name Input -->
                 <input 
                   v-model="element.name" 
-                  class="flex-1 bg-transparent border-none outline-none text-sm font-medium placeholder-zinc-400 text-zinc-900 dark:text-zinc-100 focus:ring-0"
+                  class="flex-1 min-w-0 bg-transparent border-none outline-none text-sm font-medium placeholder-zinc-400 text-zinc-900 dark:text-zinc-100 focus:ring-0"
                   placeholder="Catalog Name"
                 />
 
@@ -356,7 +356,8 @@ async function handleReset() {
                 <button 
                   v-if="!hasSystemExtra(element) && !hasSearchExtra(element)"
                   @click="deleteCatalog(index)"
-                  class="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                  class="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
+                  title="Delete Catalog"
                 >
                   <Trash2 class="w-4 h-4" />
                 </button>
@@ -403,8 +404,8 @@ async function handleReset() {
       </div>
     </div>
 
-    <!-- Footer Actions -->
-    <div class="sticky bottom-0 px-4 md:px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md -mx-6 -mb-6 mt-6 flex flex-col-reverse md:flex-row justify-between items-center gap-4 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.5)]">
+    <!-- Footer Actions (Station) -->
+    <div class="sticky bottom-0 px-4 md:px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col-reverse md:flex-row justify-between items-center gap-4 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.2)]">
       
       <button 
         @click="handleReset"

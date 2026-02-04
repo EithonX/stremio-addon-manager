@@ -14,6 +14,10 @@ const props = defineProps({
   maxWidth: {
     type: String,
     default: 'max-w-2xl'
+  },
+  noPadding: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -90,7 +94,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Content (Scrollable) -->
-        <div class="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <div class="flex-1 overflow-y-auto custom-scrollbar" :class="noPadding ? '' : 'p-6'">
           <slot></slot>
         </div>
 

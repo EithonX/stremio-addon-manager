@@ -499,39 +499,76 @@ async function executeReset() {
 
         <div class="pt-4">
            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3 block">Optimization</label>
-           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+           <div class="flex flex-col gap-3">
              <!-- Search Toggle -->
-             <button 
-               @click="toggleOptimization('search')"
-               class="flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center gap-2"
-               :class="hasCapability('search') ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300' : 'bg-zinc-50 border-zinc-200 text-zinc-400 dark:bg-zinc-800/50 dark:border-zinc-700'"
-             >
-                <Search class="w-6 h-6" />
-                <span class="text-xs font-bold">Search</span>
-                <span class="text-[10px] opacity-70">{{ hasCapability('search') ? 'Enabled' : 'Removed' }}</span>
-             </button>
+             <div class="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
+                <div class="flex items-center gap-3">
+                   <div class="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                      <Search class="w-4 h-4" />
+                   </div>
+                   <div class="flex flex-col">
+                      <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Search Support</span>
+                      <span class="text-xs text-zinc-500">{{ hasCapability('search') ? 'Included in manifest' : 'Optimized out' }}</span>
+                   </div>
+                </div>
+                <!-- Switch -->
+                <button 
+                  @click="toggleOptimization('search')"
+                  class="w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  :class="hasCapability('search') ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-zinc-700'"
+                >
+                  <div 
+                    class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm"
+                    :class="hasCapability('search') ? 'translate-x-5' : 'translate-x-0'"
+                  ></div>
+                </button>
+             </div>
 
              <!-- Catalogs Toggle -->
-             <button 
-               @click="toggleOptimization('catalogs')"
-               class="flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center gap-2"
-               :class="hasCapability('catalogs') ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300' : 'bg-zinc-50 border-zinc-200 text-zinc-400 dark:bg-zinc-800/50 dark:border-zinc-700'"
-             >
-                <Grid class="w-6 h-6" />
-                <span class="text-xs font-bold">Catalogs</span>
-                <span class="text-[10px] opacity-70">{{ hasCapability('catalogs') ? 'Enabled' : 'Removed' }}</span>
-             </button>
+             <div class="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
+                <div class="flex items-center gap-3">
+                   <div class="p-2 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
+                      <Grid class="w-4 h-4" />
+                   </div>
+                   <div class="flex flex-col">
+                      <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Home Catalogs</span>
+                      <span class="text-xs text-zinc-500">{{ hasCapability('catalogs') ? 'Visible on Home' : 'Search only' }}</span>
+                   </div>
+                </div>
+                <button 
+                  @click="toggleOptimization('catalogs')"
+                  class="w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  :class="hasCapability('catalogs') ? 'bg-emerald-600' : 'bg-zinc-200 dark:bg-zinc-700'"
+                >
+                  <div 
+                    class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm"
+                    :class="hasCapability('catalogs') ? 'translate-x-5' : 'translate-x-0'"
+                  ></div>
+                </button>
+             </div>
 
              <!-- Metadata Toggle -->
-             <button 
-               @click="toggleOptimization('meta')"
-               class="flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center gap-2"
-               :class="hasCapability('meta') ? 'bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-300' : 'bg-zinc-50 border-zinc-200 text-zinc-400 dark:bg-zinc-800/50 dark:border-zinc-700'"
-             >
-                <FileText class="w-6 h-6" />
-                <span class="text-xs font-bold">Metadata</span>
-                <span class="text-[10px] opacity-70">{{ hasCapability('meta') ? 'Enabled' : 'Removed' }}</span>
-             </button>
+             <div class="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
+                <div class="flex items-center gap-3">
+                   <div class="p-2 rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
+                      <FileText class="w-4 h-4" />
+                   </div>
+                   <div class="flex flex-col">
+                      <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Metadata</span>
+                      <span class="text-xs text-zinc-500">{{ hasCapability('meta') ? 'Detailed info' : 'Basic info' }}</span>
+                   </div>
+                </div>
+                <button 
+                  @click="toggleOptimization('meta')"
+                  class="w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  :class="hasCapability('meta') ? 'bg-purple-600' : 'bg-zinc-200 dark:bg-zinc-700'"
+                >
+                  <div 
+                    class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm"
+                    :class="hasCapability('meta') ? 'translate-x-5' : 'translate-x-0'"
+                  ></div>
+                </button>
+             </div>
            </div>
         </div>
 

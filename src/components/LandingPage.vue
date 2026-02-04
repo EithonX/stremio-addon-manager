@@ -79,9 +79,16 @@ onMounted(() => {
             <input v-model="password" type="password" class="input-field" placeholder="••••••••" />
           </div>
           
-          <label class="flex items-center gap-2 cursor-pointer group w-fit">
-             <input type="checkbox" v-model="rememberMe" class="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 focus:ring-blue-500 dark:bg-zinc-800 transition-colors" />
-             <span class="text-sm text-zinc-600 dark:text-zinc-400 select-none group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors">Remember me</span>
+          <label class="flex items-center gap-2.5 cursor-pointer group w-fit select-none">
+             <div class="relative w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center"
+                 :class="rememberMe 
+                   ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500' 
+                   : 'bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 group-hover:border-blue-400 dark:group-hover:border-blue-700'"
+             >
+                <input type="checkbox" v-model="rememberMe" class="hidden" />
+                <Check v-if="rememberMe" class="w-3.5 h-3.5 text-white stroke-[3px]" />
+             </div>
+             <span class="text-sm font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors">Remember me</span>
           </label>
 
           <button type="submit" :disabled="isLoading" class="btn-primary w-full mt-2">

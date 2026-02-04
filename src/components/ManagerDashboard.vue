@@ -147,50 +147,60 @@ const restoreConfig = () => {
     <!-- Toolbar -->
     <!-- Toolbar -->
     <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
+    <!-- Toolbar -->
+    <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
     <div class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center md:sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white dark:bg-zinc-900 md:bg-white/80 md:dark:bg-zinc-900/80 md:backdrop-blur-md">
-      <div class="flex items-center gap-3 w-full md:w-auto">
-        <div class="relative w-full md:w-64">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input 
-            v-model="searchQuery" 
-            placeholder="Search addons..." 
-            class="input-field pl-10 h-10 text-sm"
-          />
-        </div>
+      
+      <!-- Search Bar (Full width on mobile) -->
+      <div class="w-full md:w-auto md:flex-1 md:max-w-md relative">
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+        <input 
+          v-model="searchQuery" 
+          placeholder="Search addons..." 
+          class="input-field pl-10 h-10 text-sm w-full"
+        />
+      </div>
+
+      <!-- Actions Row -->
+      <div class="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end overflow-x-auto no-scrollbar">
         
+        <!-- Add Button -->
         <button 
           @click="openAddModal" 
-          class="btn-primary h-10 px-4 text-sm whitespace-nowrap bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 dark:hover:bg-zinc-600 shadow-md" 
+          class="btn-primary h-10 px-4 text-sm whitespace-nowrap bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 dark:hover:bg-zinc-600 shadow-md flex-shrink-0" 
           title="Add New Addon"
         >
           <Plus class="w-4 h-4" />
           <span class="hidden sm:inline">Add Addon</span>
-        </button>
-      </div>
-
-      <div class="flex items-center gap-2 w-full md:w-auto justify-end">
-         <button 
-           @click="isLocked = !isLocked" 
-           class="p-2 rounded-lg transition-colors border"
-           :class="isLocked ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'text-zinc-500 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'"
-           :title="isLocked ? 'Unlock Reordering' : 'Lock Reordering'"
-         >
-          <Lock v-if="isLocked" class="w-5 h-5" />
-          <Unlock v-else class="w-5 h-5" />
+          <span class="sm:hidden">Add</span>
         </button>
 
-         <button @click="backupConfig" class="p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Backup Configuration">
-          <Download class="w-5 h-5" />
-        </button>
-        <button @click="restoreConfig" class="p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Restore Configuration">
-          <Upload class="w-5 h-5" />
-        </button>
+        <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0"></div>
+
+        <div class="flex items-center gap-1 flex-shrink-0">
+           <button 
+             @click="isLocked = !isLocked" 
+             class="p-2 rounded-lg transition-colors border flex-shrink-0"
+             :class="isLocked ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'text-zinc-500 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'"
+             :title="isLocked ? 'Unlock Reordering' : 'Lock Reordering'"
+           >
+            <Lock v-if="isLocked" class="w-5 h-5" />
+            <Unlock v-else class="w-5 h-5" />
+          </button>
+
+           <button @click="backupConfig" class="p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Backup Configuration">
+            <Download class="w-5 h-5" />
+          </button>
+          <button @click="restoreConfig" class="p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Restore Configuration">
+            <Upload class="w-5 h-5" />
+          </button>
+        </div>
         
-        <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-700 mx-2"></div>
+        <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0"></div>
 
         <button 
           @click="$emit('sync')" 
-          class="btn-primary h-10 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20" 
+          class="btn-primary h-10 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex-shrink-0" 
           :disabled="isLoading"
         >
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
@@ -230,6 +240,7 @@ const restoreConfig = () => {
           <AddonItem 
             :addon="element"
             :index="index"
+            :is-locked="isLocked"
             @remove="emit('remove', index)"
             @edit="handleEdit(index)"
           />
@@ -243,6 +254,7 @@ const restoreConfig = () => {
             :key="element.transportUrl"
             :addon="element"
             :index="index"
+            :is-locked="isLocked"
             @remove="handleRemove(index)"
             @edit="handleEdit(index)"
           />

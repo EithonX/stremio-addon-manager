@@ -11,6 +11,10 @@ const props = defineProps({
   index: {
     type: Number,
     required: true
+  },
+  isLocked: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -35,12 +39,18 @@ const copyUrl = () => {
   <div class="group relative flex flex-row items-center gap-3 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-blue-400 dark:hover:border-blue-600 transition-all shadow-sm">
     
     <!-- Drag Handle (Desktop) -->
-    <div class="drag-handle sm:self-center cursor-grab active:cursor-grabbing p-1 text-zinc-300 hover:text-blue-500 rounded transition-colors hidden sm:block">
+    <div 
+      class="drag-handle sm:self-center p-1 rounded transition-colors hidden sm:block"
+      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500'"
+    >
       <GripVertical class="w-5 h-5" />
     </div>
 
-    <!-- Drag Handle (Mobile - Left aligned for easier touch) -->
-    <div class="drag-handle self-center cursor-grab active:cursor-grabbing p-1 -ml-1 text-zinc-300 hover:text-blue-500 rounded transition-colors sm:hidden">
+    <!-- Drag Handle (Mobile) -->
+    <div 
+      class="drag-handle self-center p-1 -ml-1 rounded transition-colors sm:hidden"
+      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500'"
+    >
       <GripVertical class="w-5 h-5" />
     </div>
 

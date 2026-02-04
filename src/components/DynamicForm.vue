@@ -1,7 +1,8 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import Draggable from 'vuedraggable'
-import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X } from 'lucide-vue-next'
+import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X, Search, Grid, FileText, Copy, Check } from 'lucide-vue-next'
+import { useClipboard } from '@vueuse/core'
 import AddonFeatures from './AddonFeatures.vue'
 import Modal from './ui/Modal.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
@@ -17,12 +18,22 @@ const emit = defineEmits(['update-manifest', 'cancel'])
 
 const isAdvancedMode = ref(false)
 const formModel = ref({
-  name: '', description: '', logo: '', background: '', catalogs: []
+  name: '', description: '', logo: '', background: '', catalogs: [], resources: []
 })
 const jsonModel = ref('')
 const initialManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
+
+// Cleanup/Optimization State to allow restoring within session
+const removedCapabilities = ref({
+  search: [],
+  catalogs: [],
+  meta: false
+})
+
+// Clipboard
+const { copy, copied } = useClipboard({ source: jsonModel })
 
 // Confirmation State
 const confirmModal = ref({
@@ -60,6 +71,9 @@ watch(() => props.manifest, (newManifest) => {
   syncJsonModel()
   initialManifest.value = JSON.parse(JSON.stringify(clone))
   hasUnsavedChanges.value = false
+  
+  // Reset removed state on new manifest load
+  removedCapabilities.value = { search: [], catalogs: [], meta: false }
 }, { immediate: true })
 
 // Deep watch for changes
@@ -135,15 +149,177 @@ function handleSubmit() {
   }
 }
 
+// Optimization Helpers
+function isSearchExtra(extra) {
+  return extra.name === 'search'
+}
+
+function hasSearchExtra(catalog) {
+  return catalog.extra?.some(isSearchExtra)
+}
+
+function isDedicatedSearch(catalog) {
+  // Considered dedicated if it HAS search extra AND (it's the only extra OR name implies search)
+  // Also if search is required, it's likely dedicated/search-only behavior
+  if (!hasSearchExtra(catalog)) return false
+  const search = catalog.extra.find(isSearchExtra)
+  if (search.isRequired) return true
+  if (catalog.extra.length === 1) return true
+  if (catalog.name.toLowerCase().includes('search')) return true
+  return false
+}
+
+function isHybridSearch(catalog) {
+  return hasSearchExtra(catalog) && !isDedicatedSearch(catalog)
+}
+
+function hasCapability(type) {
+  if (type === 'search') {
+    // Has capability if any catalog provides search (Dedicated or Hybrid)
+    return formModel.value.catalogs?.some(hasSearchExtra)
+  }
+  if (type === 'catalogs') {
+    // Has capability if any catalog provides content (Hybrid or Content-Only)
+    // Content-Only = No Search Extra OR Hybrid (has search but also content)
+    // Basically: Any catalog that is NOT Dedicated Search (which is invisible anyway usually)
+    // Or more strictly: Any catalog that has non-search extras OR no extras?
+    // Let's simpler: If it's NOT dedicated search, it's a content catalog.
+    return formModel.value.catalogs?.some(c => !isDedicatedSearch(c))
+  }
+  if (type === 'meta') {
+    return formModel.value.resources?.includes('meta')
+  }
+  return false
+}
+
+function toggleOptimization(type) {
+  const enabled = hasCapability(type)
+  
+  if (type === 'search') {
+    if (enabled) {
+      // Disable Search:
+      // 1. Dedicated Search Catalogs -> DELETE (Store backup)
+      // 2. Hybrid Catalogs -> STRIP 'search' extra (Store backup)
+      
+      const dedicated = []
+      const hybridBackups = [] // { index, extra }
+      
+      formModel.value.catalogs = formModel.value.catalogs.filter((c, idx) => {
+        if (isDedicatedSearch(c)) {
+          dedicated.push(c)
+          return false // Remove
+        }
+        if (isHybridSearch(c)) {
+          // Strip search extra
+          const searchExtra = c.extra.find(isSearchExtra)
+          hybridBackups.push({ id: c.id, type: c.type, extra: searchExtra })
+          c.extra = c.extra.filter(e => !isSearchExtra(e))
+          return true // Keep
+        }
+        return true
+      })
+      
+      removedCapabilities.value.search = { dedicated, hybridBackups }
+    } else {
+      // Enable Search:
+      // 1. Restore Dedicated
+      // 2. Restore Hybrid extras
+      const { dedicated, hybridBackups } = removedCapabilities.value.search
+      
+      if (dedicated && dedicated.length) {
+        formModel.value.catalogs.push(...dedicated)
+      }
+      
+      if (hybridBackups && hybridBackups.length) {
+        formModel.value.catalogs.forEach(c => {
+          // Find matching backup
+          const backup = hybridBackups.find(b => b.id === c.id && b.type === c.type)
+          if (backup && !hasSearchExtra(c)) {
+            if (!c.extra) c.extra = []
+            c.extra.push(backup.extra)
+          }
+        })
+      }
+      
+      removedCapabilities.value.search = [] 
+    }
+  }
+  
+  if (type === 'catalogs') {
+    if (enabled) {
+      // Disable Home Catalogs:
+      // 1. Content-Only (No Search) -> DELETE
+      // 2. Hybrid -> STRIP non-search extras. Ensure search isRequired=true (to hide from home).
+      
+      const contentOnly = []
+      const hybridBackups = [] 
+      
+      formModel.value.catalogs = formModel.value.catalogs.filter(c => {
+        if (isDedicatedSearch(c)) return true // Keep dedicated search
+        
+        if (hasSearchExtra(c)) {
+          // Hybrid: Become Search-Only
+          // Backup original extras
+          hybridBackups.push({ id: c.id, type: c.type, extra: [...c.extra] })
+          
+          // Keep ONLY search extra
+          const searchExtra = c.extra.find(isSearchExtra)
+          // Force isRequired = true to likely hide from Home
+          searchExtra.isRequired = true 
+          c.extra = [searchExtra]
+          return true
+        } else {
+          // Content-Only: Delete
+          contentOnly.push(c)
+          return false
+        }
+      })
+      
+      removedCapabilities.value.catalogs = { contentOnly, hybridBackups }
+    } else {
+      // Enable Home Catalogs:
+      const { contentOnly, hybridBackups } = removedCapabilities.value.catalogs
+      
+      if (contentOnly && contentOnly.length) {
+        formModel.value.catalogs.push(...contentOnly)
+      }
+      
+      if (hybridBackups && hybridBackups.length) {
+        formModel.value.catalogs.forEach(c => {
+          const backup = hybridBackups.find(b => b.id === c.id && b.type === c.type)
+          if (backup) {
+            // Restore full extras
+            c.extra = backup.extra
+          }
+        })
+      }
+      removedCapabilities.value.catalogs = []
+    }
+  }
+  
+  if (type === 'meta') {
+    const r = formModel.value.resources || []
+    if (enabled) {
+      // Disable: remove 'meta'
+      formModel.value.resources = r.filter(x => x !== 'meta')
+      removedCapabilities.value.meta = true
+    } else {
+      // Enable: add 'meta' (if it was removed or just add it)
+      if (!r.includes('meta')) formModel.value.resources.push('meta')
+      removedCapabilities.value.meta = false
+    }
+  }
+  
+  syncJsonModel()
+}
+
 // Catalog Helpers
 function hasSystemExtra(catalog) {
   if (!Array.isArray(catalog.extra)) return false
   return catalog.extra.some(e => ['lastVideosIds', 'calendarVideosIds'].includes(e.name))
 }
 
-function hasSearchExtra(catalog) {
-  return catalog.extra?.some(e => e.name === 'search')
-}
+
 
 function isCatalogVisible(catalog) {
   if (hasSearchExtra(catalog)) {
@@ -321,6 +497,44 @@ async function executeReset() {
           <AddonFeatures :manifest="formModel" />
         </div>
 
+        <div class="pt-4">
+           <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3 block">Optimization</label>
+           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+             <!-- Search Toggle -->
+             <button 
+               @click="toggleOptimization('search')"
+               class="flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center gap-2"
+               :class="hasCapability('search') ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300' : 'bg-zinc-50 border-zinc-200 text-zinc-400 dark:bg-zinc-800/50 dark:border-zinc-700'"
+             >
+                <Search class="w-6 h-6" />
+                <span class="text-xs font-bold">Search</span>
+                <span class="text-[10px] opacity-70">{{ hasCapability('search') ? 'Enabled' : 'Removed' }}</span>
+             </button>
+
+             <!-- Catalogs Toggle -->
+             <button 
+               @click="toggleOptimization('catalogs')"
+               class="flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center gap-2"
+               :class="hasCapability('catalogs') ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300' : 'bg-zinc-50 border-zinc-200 text-zinc-400 dark:bg-zinc-800/50 dark:border-zinc-700'"
+             >
+                <Grid class="w-6 h-6" />
+                <span class="text-xs font-bold">Catalogs</span>
+                <span class="text-[10px] opacity-70">{{ hasCapability('catalogs') ? 'Enabled' : 'Removed' }}</span>
+             </button>
+
+             <!-- Metadata Toggle -->
+             <button 
+               @click="toggleOptimization('meta')"
+               class="flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center gap-2"
+               :class="hasCapability('meta') ? 'bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-300' : 'bg-zinc-50 border-zinc-200 text-zinc-400 dark:bg-zinc-800/50 dark:border-zinc-700'"
+             >
+                <FileText class="w-6 h-6" />
+                <span class="text-xs font-bold">Metadata</span>
+                <span class="text-[10px] opacity-70">{{ hasCapability('meta') ? 'Enabled' : 'Removed' }}</span>
+             </button>
+           </div>
+        </div>
+
         <hr class="border-zinc-100 dark:border-zinc-800" />
 
         <!-- Catalogs Editor -->
@@ -419,6 +633,16 @@ async function executeReset() {
                 ></textarea>
              </div>
          </div>
+
+         <!-- Copy Button -->
+         <button 
+           @click="copy(jsonModel)" 
+           class="absolute top-4 right-4 z-20 p-2 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors border border-zinc-200/50 dark:border-zinc-700/50"
+           title="Copy JSON"
+         >
+           <Check v-if="copied" class="w-4 h-4 text-emerald-500" />
+           <Copy v-else class="w-4 h-4" />
+         </button>
       </div>
     </div>
 

@@ -163,6 +163,7 @@ defineExpose({
             <!-- Default Option -->
              <button
                 @click="selectAccount(DEFAULT_EMAIL)"
+                type="button"
                 class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors"
                 :class="selectedEmail === DEFAULT_EMAIL ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'"
               >
@@ -173,8 +174,9 @@ defineExpose({
              <!-- Saved Accounts -->
              <button
                 v-for="acc in displayAccounts" 
-                :key="acc.email" 
+                :key="acc.account?.email || acc.email" 
                 @click="selectAccount(acc.email)"
+                type="button"
                 class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors"
                 :class="selectedEmail === acc.email ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'"
               >

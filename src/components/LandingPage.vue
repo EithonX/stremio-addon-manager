@@ -25,11 +25,7 @@ const savedAccountsRef = ref(null)
 const handleAccountSelect = (account) => {
   email.value = account.email || ''
   password.value = account.password || ''
-  if (account.authKey) {
-    // If we have an authKey, we can auto-login or just prefill
-    // For now, let's just emit if the user clicks "Connect"
-    // Or we could trigger it automatically? Let's wait for explicit action.
-  }
+  manualKey.value = account.authKey || ''
 }
 
 const handleLogin = () => {

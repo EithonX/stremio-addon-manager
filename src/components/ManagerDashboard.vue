@@ -145,7 +145,9 @@ const restoreConfig = () => {
 <template>
   <div class="container mx-auto px-4 py-8 max-w-5xl">
     <!-- Toolbar -->
-    <div class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md">
+    <!-- Toolbar -->
+    <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
+    <div class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center md:sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white dark:bg-zinc-900 md:bg-white/80 md:dark:bg-zinc-900/80 md:backdrop-blur-md">
       <div class="flex items-center gap-3 w-full md:w-auto">
         <div class="relative w-full md:w-64">
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />

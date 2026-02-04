@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { CheckCircle2, AlertCircle } from 'lucide-vue-next'
 
@@ -18,6 +18,16 @@ const isLoading = ref(false)
 const isAuthChecking = ref(true)
 const notification = ref({ show: false, type: '', message: '' })
 const addons = ref([])
+
+const savedAccounts = useStorage('sam_saved_accounts', [])
+const currentSessionEmail = ref('')
+
+const currentUserEmail = computed(() => {
+  if (!authKey.value) return ''
+  if (currentSessionEmail.value) return currentSessionEmail.value
+  const account = savedAccounts.value.find(a => a.authKey === authKey.value)
+  return account?.label || account?.email || 'Guest'
+})
 
 const notify = (type, msg) => {
   notification.value = { show: true, type, message: msg }
@@ -46,7 +56,7 @@ const loadAddons = async () => {
   }
 }
 
-const login = async ({ email, password }) => {
+const login = async ({ email, password, rememberMe }) => {
   isLoading.value = true
   try {
     const res = await fetch(`${API_BASE}login`, {
@@ -56,24 +66,27 @@ const login = async ({ email, password }) => {
     const data = await res.json()
     if (data.result?.authKey) {
       authKey.value = data.result.authKey
+      currentSessionEmail.value = email
       // Persist to SavedAccounts
       // We need to access SavedAccounts but it's inside LandingPage. 
       // Better way: App.vue manages this or LandingPage handles it.
       // Since LandingPage is unmounted on success, we should save BEFORE emitting or App.vue handles it.
       // Let's modify App.vue to save to localStorage manually OR use a global store.
       // Actually, SavedAccounts uses useStorage internally, so we can just update that storage key!
-      const saved = JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]')
-      const idx = saved.findIndex(a => a.email === email)
-      const newAcc = { 
-        email, 
-        password: password || '', // Only save password if provided
-        authKey: data.result.authKey, 
-        label: idx >= 0 ? saved[idx].label : email,
-        updatedAt: Date.now() 
+      if (rememberMe) {
+          const saved = JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]')
+          const idx = saved.findIndex(a => a.email === email)
+          const newAcc = { 
+            email, 
+            password: password || '', // Only save password if provided
+            authKey: data.result.authKey, 
+            label: idx >= 0 ? saved[idx].label : email,
+            updatedAt: Date.now() 
+          }
+          if (idx >= 0) saved[idx] = { ...saved[idx], ...newAcc }
+          else saved.push(newAcc)
+          localStorage.setItem('sam_saved_accounts', JSON.stringify(saved))
       }
-      if (idx >= 0) saved[idx] = { ...saved[idx], ...newAcc }
-      else saved.push(newAcc)
-      localStorage.setItem('sam_saved_accounts', JSON.stringify(saved))
       
       await loadAddons()
     } else {
@@ -116,6 +129,7 @@ const syncAddons = async () => {
 // 4. This is the logout function called by both components
 const logout = () => {
   authKey.value = null
+  currentSessionEmail.value = ''
   addons.value = []
   step.value = 1
   notify('success', 'Disconnected successfully')
@@ -132,7 +146,7 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 transition-colors duration-300">
-    <NavBar :isLoggedIn="step === 2" @logout="logout" />
+    <NavBar :isLoggedIn="step === 2" :userEmail="currentUserEmail" @logout="logout" />
     
     <main class="flex-grow">
       <transition enter-active-class="transition ease-out duration-300" enter-from-class="translate-y-full opacity-0" enter-to-class="translate-y-0 opacity-100" leave-active-class="transition ease-in duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">

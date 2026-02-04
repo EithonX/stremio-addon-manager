@@ -1,8 +1,9 @@
 <script setup>
-import { ShieldCheck, LogOut } from 'lucide-vue-next'
+import { ShieldCheck } from 'lucide-vue-next'
 import ThemeToggle from './ThemeToggle.vue'
+import ProfileMenu from './ui/ProfileMenu.vue'
 
-defineProps(['isLoggedIn'])
+defineProps(['isLoggedIn', 'userEmail'])
 defineEmits(['logout'])
 </script>
 
@@ -21,15 +22,12 @@ defineEmits(['logout'])
       </div>
 
       <div class="flex items-center gap-3">
-        <button 
+        <ProfileMenu 
           v-if="isLoggedIn" 
-          @click="$emit('logout')" 
-          class="flex items-center gap-2 text-zinc-500 hover:text-red-600 px-3 py-2 rounded-lg transition-colors"
-          title="Disconnect"
-        >
-          <LogOut class="w-5 h-5" />
-          <span class="hidden sm:inline text-sm font-medium">Disconnect</span>
-        </button>
+          :email="userEmail"
+          @logout="$emit('logout')" 
+          @switch-account="$emit('logout')"
+        />
         <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
         <ThemeToggle />
       </div>

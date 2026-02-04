@@ -127,7 +127,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="w-full space-y-2">
+  <div v-if="savedAccounts.length > 0" class="w-full space-y-2">
     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
       Switch Account
     </label>
@@ -196,7 +196,8 @@ defineExpose({
       
       <div v-if="selectedEmail !== DEFAULT_EMAIL" class="flex gap-2 animate-fade-in">
         <button 
-          @click="startRename"
+          @click.stop="startRename"
+          type="button"
           title="Rename Account"
           class="h-11 w-11 flex items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-900 transition-all"
         >
@@ -204,7 +205,8 @@ defineExpose({
         </button>
         
         <button 
-          @click="confirmRemove"
+          @click.stop="confirmRemove"
+          type="button"
           title="Remove Account"
           class="h-11 w-11 flex items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-500 hover:text-red-600 hover:border-red-200 dark:hover:border-red-900 transition-all"
         >
@@ -225,12 +227,14 @@ defineExpose({
       />
       <button 
         @click="saveRename"
+        type="button"
         class="text-xs font-bold text-blue-600 dark:text-blue-400 px-3 py-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
       >
         Save
       </button>
       <button 
         @click="isEditing = false"
+        type="button"
         class="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1.5"
       >
         Cancel

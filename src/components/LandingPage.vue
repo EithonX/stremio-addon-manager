@@ -22,6 +22,8 @@ const copyToClipboard = (text) => {
 
 const savedAccountsRef = ref(null)
 
+const rememberMe = ref(false)
+
 const handleAccountSelect = (account) => {
   email.value = account.email || ''
   password.value = account.password || ''
@@ -29,7 +31,7 @@ const handleAccountSelect = (account) => {
 }
 
 const handleLogin = () => {
-  emit('login', { email: email.value, password: password.value })
+  emit('login', { email: email.value, password: password.value, rememberMe: rememberMe.value })
   // We can save the account on successful login in App.vue, but we can also trigger a save here if we want optimistic updates
   // But strictly speaking App.vue handles the logic.
 }
@@ -76,6 +78,12 @@ onMounted(() => {
             <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Password</label>
             <input v-model="password" type="password" class="input-field" placeholder="••••••••" />
           </div>
+          
+          <label class="flex items-center gap-2 cursor-pointer group w-fit">
+             <input type="checkbox" v-model="rememberMe" class="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 focus:ring-blue-500 dark:bg-zinc-800 transition-colors" />
+             <span class="text-sm text-zinc-600 dark:text-zinc-400 select-none group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors">Remember me</span>
+          </label>
+
           <button type="submit" :disabled="isLoading" class="btn-primary w-full mt-2">
             <Loader2 v-if="isLoading" class="w-5 h-5 animate-spin" />
             <span v-else>Connect Account</span>

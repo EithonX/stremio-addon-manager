@@ -1,13 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ChevronDown, Edit2, Trash2, Check } from 'lucide-vue-next'
+import { ChevronDown, Edit2, Trash2, Check, Lock } from 'lucide-vue-next'
 import { useStorage } from '@vueuse/core'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 
 const emit = defineEmits(['selected'])
 
 // Use vueuse useStorage for easy persistence
-const savedAccounts = useStorage('sam_saved_accounts', []) // [{ email, label, authKey }]
+const savedAccounts = useStorage('sam_saved_accounts', []) // [{ email, label, authKey? , protected? , authKeyEncrypted? }]
 const DEFAULT_EMAIL = ''
 
 const defaultAccount = {
@@ -159,7 +159,10 @@ onUnmounted(() => {
                 :class="selectedEmail === acc.email ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'"
               >
                 <div class="flex flex-col truncate pr-2">
-                  <span class="font-medium truncate">{{ acc.label }}</span>
+                  <span class="font-medium truncate flex items-center gap-1.5">
+                    {{ acc.label }}
+                    <Lock v-if="acc.protected" class="w-3 h-3 text-amber-500 shrink-0" />
+                  </span>
                   <span v-if="acc.label !== acc.email" class="text-xs text-zinc-400 truncate">{{ acc.email }}</span>
                 </div>
                 <Check v-if="selectedEmail === acc.email" class="w-4 h-4 flex-shrink-0" />

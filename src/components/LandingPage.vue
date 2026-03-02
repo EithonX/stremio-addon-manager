@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ArrowRight, Loader2, Key, HelpCircle, Smartphone, Monitor, Info, Shield, Copy, Check, AlertTriangle } from 'lucide-vue-next'
 import { useClipboard, useWindowSize } from '@vueuse/core'
 import SavedAccounts from './SavedAccounts.vue'
+import { decryptAuthKey } from '../utils/cryptoVault'
 
 defineProps(['isLoading'])
 const emit = defineEmits(['login', 'loginKey'])
@@ -21,17 +22,82 @@ const copyToClipboard = (text) => {
 }
 
 const rememberMe = ref(false)
+const protectWithPin = ref(true)
+const rememberPin = ref('')
+const unlockPin = ref('')
+const protectedSelection = ref(null)
+const accountNotice = ref('')
+const accountNoticeType = ref('info')
+
+const setAccountNotice = (message, type = 'info') => {
+  accountNotice.value = message
+  accountNoticeType.value = type
+}
+
+const trimmedPassword = computed(() => password.value.trim())
+const trimmedManualKey = computed(() => manualKey.value.trim())
+const shouldUseAuthKeyLogin = computed(() => trimmedManualKey.value.length > 0 && trimmedPassword.value.length === 0)
 
 const handleAccountSelect = (account) => {
   email.value = account.email || ''
   password.value = ''
-  manualKey.value = account.authKey || ''
+  unlockPin.value = ''
+  if (account?.protected && account?.authKeyEncrypted) {
+    manualKey.value = ''
+    protectedSelection.value = account
+    setAccountNotice('This saved account is PIN-protected. Enter its PIN to unlock the AuthKey.', 'info')
+  } else {
+    manualKey.value = account.authKey || ''
+    protectedSelection.value = null
+    accountNotice.value = ''
+  }
+}
+
+const unlockSavedAuthKey = async () => {
+  if (!protectedSelection.value) return
+  if (!unlockPin.value) {
+    setAccountNotice('Enter your PIN to unlock this saved AuthKey.', 'error')
+    return
+  }
+
+  try {
+    manualKey.value = await decryptAuthKey(protectedSelection.value, unlockPin.value)
+    protectedSelection.value = null
+    unlockPin.value = ''
+    setAccountNotice('AuthKey unlocked for this session.', 'success')
+  } catch {
+    setAccountNotice('Could not unlock AuthKey. Check PIN and try again.', 'error')
+  }
 }
 
 const handleLogin = () => {
-  emit('login', { email: email.value, password: password.value, rememberMe: rememberMe.value })
-  // We can save the account on successful login in App.vue, but we can also trigger a save here if we want optimistic updates
-  // But strictly speaking App.vue handles the logic.
+  if (rememberMe.value && protectWithPin.value && rememberPin.value.length < 4) {
+    setAccountNotice('PIN must be at least 4 characters before enabling protected Remember Me.', 'error')
+    return
+  }
+
+  if (protectedSelection.value) {
+    setAccountNotice('Unlock the saved AuthKey first, then connect.', 'error')
+    return
+  }
+
+  if (shouldUseAuthKeyLogin.value) {
+    emit('loginKey', trimmedManualKey.value)
+    return
+  }
+
+  if (!trimmedPassword.value) {
+    setAccountNotice('Enter your password or use an AuthKey to continue.', 'error')
+    return
+  }
+
+  emit('login', {
+    email: email.value,
+    password: password.value,
+    rememberMe: rememberMe.value,
+    protectWithPin: rememberMe.value ? protectWithPin.value : false,
+    rememberPin: rememberMe.value && protectWithPin.value ? rememberPin.value : ''
+  })
 }
 
 // Auto-select tab based on screen size
@@ -51,7 +117,7 @@ onMounted(() => {
           <span class="text-blue-600">Stremio Library</span>
         </h1>
         <p class="text-lg text-zinc-500 dark:text-zinc-400 leading-relaxed">
-          The professional addon manager. Reorder your feed, organize your content, and fix your catalog instantly.
+          Reorder addons, edit manifests, tune capabilities, and backup/restore your setup in one place.
         </p>
       </div>
 
@@ -66,10 +132,22 @@ onMounted(() => {
             @selected="handleAccountSelect" 
             class="mb-4"
           />
+          <div v-if="protectedSelection" class="space-y-2 p-3 rounded-lg bg-blue-50 dark:bg-zinc-900/50 border border-blue-200 dark:border-zinc-800">
+            <label class="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Unlock Saved AuthKey</label>
+            <div class="flex gap-2">
+              <input v-model="unlockPin" type="password" class="input-field h-10" placeholder="Enter PIN" @keyup.enter="unlockSavedAuthKey" />
+              <button type="button" @click="unlockSavedAuthKey" class="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
+                Unlock
+              </button>
+            </div>
+          </div>
+          <p v-if="accountNotice" class="text-xs font-medium" :class="accountNoticeType === 'error' ? 'text-red-600 dark:text-red-400' : accountNoticeType === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-400'">
+            {{ accountNotice }}
+          </p>
 
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Email</label>
-            <input v-model="email" type="email" class="input-field" placeholder="name@example.com" required />
+            <input v-model="email" type="email" class="input-field" placeholder="name@example.com" :required="!shouldUseAuthKeyLogin" />
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Password</label>
@@ -88,9 +166,29 @@ onMounted(() => {
              <span class="text-sm font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors">Remember me</span>
           </label>
 
+          <div v-if="rememberMe" class="space-y-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40">
+            <label class="flex items-center gap-2.5 cursor-pointer group w-fit select-none">
+              <div class="relative w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center"
+                  :class="protectWithPin
+                    ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500'
+                    : 'bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 group-hover:border-blue-400 dark:group-hover:border-blue-700'"
+              >
+                <input type="checkbox" v-model="protectWithPin" class="hidden" />
+                <Check v-if="protectWithPin" class="w-3.5 h-3.5 text-white stroke-[3px]" />
+              </div>
+              <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Protect remembered AuthKey with PIN (Recommended)</span>
+            </label>
+
+            <div v-if="protectWithPin" class="space-y-1.5">
+              <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">PIN</label>
+              <input v-model="rememberPin" type="password" minlength="4" class="input-field h-10" placeholder="At least 4 characters" />
+              <p class="text-xs text-zinc-500 dark:text-zinc-400">PIN never leaves your browser and is required later to unlock this saved AuthKey.</p>
+            </div>
+          </div>
+
           <button type="submit" :disabled="isLoading" class="btn-primary w-full mt-2">
             <Loader2 v-if="isLoading" class="w-5 h-5 animate-spin" />
-            <span v-else>Connect Account</span>
+            <span v-else>{{ shouldUseAuthKeyLogin ? 'Connect with Saved AuthKey' : 'Connect Account' }}</span>
           </button>
         </form>
 
@@ -124,10 +222,14 @@ onMounted(() => {
           <div class="space-y-2">
             <h3 class="text-xl font-bold text-zinc-900 dark:text-white">Why use this tool?</h3>
             <p class="text-base text-zinc-600 dark:text-zinc-300 leading-relaxed">
-              Stremio locks addons in the order you install them. To move a catalog up, you normally have to uninstall everything.
-              <br><br>
-              <strong>This tool fixes that.</strong> Drag-and-drop to reorder instantly without reinstalling.
+              Stremio's default flow makes addon management tedious. This tool gives you safe power features without reinstall loops.
             </p>
+            <ul class="text-sm text-zinc-600 dark:text-zinc-300 space-y-1.5 pt-1">
+              <li>Reorder addons with drag-and-drop and lock/unlock controls.</li>
+              <li>Edit addon manifests in form mode or raw JSON mode.</li>
+              <li>Optimize catalogs/search/meta capabilities per addon.</li>
+              <li>Backup and restore your addon collection quickly.</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -158,7 +260,7 @@ onMounted(() => {
 
           <div v-if="activeTab === 'desktop'" class="px-4 pb-4 space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
             <ol class="list-decimal list-inside space-y-2 marker:text-blue-600 marker:font-bold">
-              <li>Log into <a href="https://web.stremio.com" target="_blank" class="text-blue-600 underline font-bold">Stremio Web</a>.</li>
+              <li>Open <a href="https://web.stremio.com" target="_blank" class="text-blue-600 underline font-bold">Stremio Web</a> and log into your account first.</li>
               <li>Press <kbd class="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 font-mono text-xs font-bold border border-zinc-300 dark:border-zinc-700">F12</kbd> (or Right Click > Inspect) to open Console.</li>
               <li>Paste this code and hit Enter:</li>
             </ol>
@@ -180,7 +282,7 @@ onMounted(() => {
               <p>Bookmarks are tricky. We recommend using a PC.</p>
             </div>
             <ol class="list-decimal list-inside space-y-2 marker:text-blue-600 marker:font-bold">
-              <li>Open <a href="https://web.stremio.com" target="_blank" class="text-blue-600 underline font-bold">Stremio Web</a> in Chrome.</li>
+              <li>Open <a href="https://web.stremio.com" target="_blank" class="text-blue-600 underline font-bold">Stremio Web</a> in Chrome and log in first.</li>
               <li>Type <code class="bg-zinc-100 dark:bg-zinc-800 px-1 rounded font-bold">javascript:</code> in URL bar.</li>
               <li>Paste this code and <strong>hit Enter</strong>:</li>
             </ol>
@@ -207,11 +309,11 @@ onMounted(() => {
         <div class="space-y-3">
           <details class="group card-base open:ring-1 ring-blue-500/20">
             <summary class="flex items-center justify-between p-4 font-semibold cursor-pointer list-none text-zinc-800 dark:text-zinc-100 text-sm">
-              Can I move "Popular" rows?
+              What can this manager do besides reorder?
               <ArrowRight class="w-4 h-4 transition-transform group-open:rotate-90 text-zinc-400" />
             </summary>
             <div class="px-4 pb-4 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed border-t border-zinc-100 dark:border-zinc-800 pt-3">
-              Yes. If you move the "Cinemeta" addon, its rows (Popular/Featured) will move with it. Note that the "Continue Watching" row is pinned by Stremio and cannot be moved.
+              You can edit manifests (form/JSON), toggle optimization flags (search/catalog/meta), backup/restore collections, and reset an addon manifest to default from the editor.
             </div>
           </details>
 
@@ -227,11 +329,21 @@ onMounted(() => {
 
           <details class="group card-base open:ring-1 ring-blue-500/20">
             <summary class="flex items-center justify-between p-4 font-semibold cursor-pointer list-none text-zinc-800 dark:text-zinc-100 text-sm">
-              Will this break my profile?
+              Can I move Cinemeta rows and everything else?
               <ArrowRight class="w-4 h-4 transition-transform group-open:rotate-90 text-zinc-400" />
             </summary>
             <div class="px-4 pb-4 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed border-t border-zinc-100 dark:border-zinc-800 pt-3">
-              Unlikely. We use the official API to sync the list. However, there is no "Reset to Default" button. If your order gets messy, you can simply uninstall/reinstall your addons to reset the default order.
+              Yes, moving the Cinemeta addon reorders its rows (like Popular/Featured). "Continue Watching" is pinned by Stremio itself, so it cannot be moved by any addon manager.
+            </div>
+          </details>
+
+          <details class="group card-base open:ring-1 ring-blue-500/20">
+            <summary class="flex items-center justify-between p-4 font-semibold cursor-pointer list-none text-zinc-800 dark:text-zinc-100 text-sm">
+              Is PIN-protected Remember Me safer?
+              <ArrowRight class="w-4 h-4 transition-transform group-open:rotate-90 text-zinc-400" />
+            </summary>
+            <div class="px-4 pb-4 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed border-t border-zinc-100 dark:border-zinc-800 pt-3">
+              Yes. With PIN protection, the saved AuthKey is encrypted at rest in your browser storage. You must unlock it with your PIN before use. It reduces local storage exposure risk, though no browser app can fully defend against an active XSS attack.
             </div>
           </details>
         </div>

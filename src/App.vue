@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { CheckCircle2, AlertCircle } from 'lucide-vue-next'
 
@@ -9,6 +9,7 @@ import ManagerDashboard from './components/ManagerDashboard.vue'
 import Footer from './components/Footer.vue'
 
 import SkeletonLoader from './components/ui/SkeletonLoader.vue'
+import { encryptAuthKey, hashAuthKey } from './utils/cryptoVault'
 
 // Logic
 const API_BASE = "/api/"
@@ -21,12 +22,16 @@ const addons = ref([])
 
 const savedAccounts = useStorage('sam_saved_accounts', [])
 const currentSessionEmail = ref('')
+const currentAuthKeyHash = ref('')
 
 const currentUserEmail = computed(() => {
   if (!authKey.value) return ''
   if (currentSessionEmail.value) return currentSessionEmail.value
   const accounts = Array.isArray(savedAccounts.value) ? savedAccounts.value : []
-  const account = accounts.find(a => a.authKey === authKey.value)
+  const account = accounts.find((a) => (
+    (a.authKey && a.authKey === authKey.value) ||
+    (currentAuthKeyHash.value && a.authKeyHash === currentAuthKeyHash.value)
+  ))
   return account?.label || account?.email || 'Guest'
 })
 
@@ -57,7 +62,7 @@ const loadAddons = async () => {
   }
 }
 
-const login = async ({ email, password, rememberMe }) => {
+const login = async ({ email, password, rememberMe, protectWithPin, rememberPin }) => {
   isLoading.value = true
   try {
     const res = await fetch(`${API_BASE}login`, {
@@ -66,17 +71,35 @@ const login = async ({ email, password, rememberMe }) => {
     })
     const data = await res.json()
     if (data.result?.authKey) {
+      if (rememberMe && protectWithPin && (!rememberPin || rememberPin.length < 4)) {
+        throw new Error('PIN must be at least 4 characters to protect saved AuthKey.')
+      }
+
       authKey.value = data.result.authKey
       currentSessionEmail.value = email
       if (rememberMe) {
           const idx = savedAccounts.value.findIndex(a => (a.email || '').toLowerCase() === email.toLowerCase())
+          const existing = idx >= 0 ? savedAccounts.value[idx] : null
+          const authKeyHash = await hashAuthKey(data.result.authKey)
+          const normalizedEmail = (email || '').trim()
+          const rememberSecurely = Boolean(protectWithPin)
+
           const newAcc = {
-            email,
+            email: normalizedEmail,
+            authKeyHash,
+            protected: rememberSecurely,
             authKey: data.result.authKey,
-            label: idx >= 0 ? (savedAccounts.value[idx].label || email) : email,
+            label: existing?.label || normalizedEmail,
             updatedAt: Date.now()
           }
-          if (idx >= 0) savedAccounts.value[idx] = { ...savedAccounts.value[idx], ...newAcc }
+
+          if (rememberSecurely) {
+            const encrypted = await encryptAuthKey(data.result.authKey, rememberPin)
+            delete newAcc.authKey
+            Object.assign(newAcc, encrypted)
+          }
+
+          if (idx >= 0) savedAccounts.value[idx] = newAcc
           else savedAccounts.value.push(newAcc)
       }
       
@@ -127,12 +150,33 @@ const logout = () => {
 }
 
 onMounted(() => {
-  // Security hardening: drop any legacy persisted passwords from local storage records.
-  if (Array.isArray(savedAccounts.value)) {
-    savedAccounts.value = savedAccounts.value.map((account) => {
-      const { password, ...rest } = account || {}
-      return rest
-    })
+  if (!Array.isArray(savedAccounts.value)) {
+    savedAccounts.value = []
+  } else {
+    // Security hardening: drop legacy password fields and normalize saved account shape.
+    savedAccounts.value = savedAccounts.value
+      .filter((account) => account && typeof account.email === 'string' && account.email.trim())
+      .map((account) => {
+        const clean = {
+          email: account.email.trim(),
+          label: account.label || account.email.trim(),
+          updatedAt: account.updatedAt || Date.now(),
+          authKeyHash: account.authKeyHash || '',
+          protected: Boolean(account.protected)
+        }
+
+        if (clean.protected && account.authKeyEncrypted && account.authKeyIv && account.authKeySalt) {
+          clean.authKeyEncrypted = account.authKeyEncrypted
+          clean.authKeyIv = account.authKeyIv
+          clean.authKeySalt = account.authKeySalt
+          clean.authKeyKdfIterations = account.authKeyKdfIterations || 310000
+        } else if (typeof account.authKey === 'string' && account.authKey) {
+          clean.authKey = account.authKey
+          clean.protected = false
+        }
+
+        return clean
+      })
   }
 
   if (authKey.value) {
@@ -141,6 +185,18 @@ onMounted(() => {
     isAuthChecking.value = false
   }
 })
+
+watch(authKey, async (value) => {
+  if (!value) {
+    currentAuthKeyHash.value = ''
+    return
+  }
+  try {
+    currentAuthKeyHash.value = await hashAuthKey(value)
+  } catch {
+    currentAuthKeyHash.value = ''
+  }
+}, { immediate: true })
 </script>
 
 <template>

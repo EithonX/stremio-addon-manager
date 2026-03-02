@@ -5,6 +5,8 @@ import ProfileMenu from './ui/ProfileMenu.vue'
 
 defineProps(['isLoggedIn', 'userEmail'])
 defineEmits(['logout'])
+
+const appVersion = __APP_VERSION__
 </script>
 
 <template>
@@ -17,7 +19,7 @@ defineEmits(['logout'])
         </div>
         <div>
           <h1 class="font-bold text-lg md:text-xl leading-none tracking-tight text-zinc-900 dark:text-zinc-100">Stremio Addon Manager</h1>
-          <p class="text-[10px] md:text-xs font-bold text-zinc-500 mt-1">v2.1.1 by EithonX</p>
+          <p class="text-[10px] md:text-xs font-bold text-zinc-500 mt-1">v{{ appVersion }} by EithonX</p>
         </div>
       </div>
 

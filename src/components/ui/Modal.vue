@@ -112,12 +112,13 @@ onUnmounted(() => {
   width: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-zinc-200 dark:bg-zinc-700 rounded-full;
+  background-color: rgb(228 228 231);
+  border-radius: 9999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  @apply bg-zinc-300 dark:bg-zinc-600;
+  background-color: rgb(212 212 216);
 }
 </style>

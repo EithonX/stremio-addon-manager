@@ -272,6 +272,7 @@ defineExpose({
   background: transparent; 
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-zinc-200 dark:bg-zinc-600 rounded-full;
+  background-color: rgb(228 228 231);
+  border-radius: 9999px;
 }
 </style>

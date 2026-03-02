@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, defineExpose, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 
 const props = defineProps({

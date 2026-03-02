@@ -3,7 +3,7 @@ export async function onRequest(context) {
   const url = new URL(context.request.url);
   
   const targetPath = url.pathname.replace(/^\/api/, '');
-  const targetUrl = `https://api.strem.io/api${targetPath}`;
+  const targetUrl = `https://api.strem.io/api${targetPath}${url.search}`;
 
   // 3. Create the secret request to Stremio
   const newRequest = new Request(targetUrl, {

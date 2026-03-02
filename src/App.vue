@@ -25,7 +25,8 @@ const currentSessionEmail = ref('')
 const currentUserEmail = computed(() => {
   if (!authKey.value) return ''
   if (currentSessionEmail.value) return currentSessionEmail.value
-  const account = savedAccounts.value.find(a => a.authKey === authKey.value)
+  const accounts = Array.isArray(savedAccounts.value) ? savedAccounts.value : []
+  const account = accounts.find(a => a.authKey === authKey.value)
   return account?.label || account?.email || 'Guest'
 })
 
@@ -67,25 +68,16 @@ const login = async ({ email, password, rememberMe }) => {
     if (data.result?.authKey) {
       authKey.value = data.result.authKey
       currentSessionEmail.value = email
-      // Persist to SavedAccounts
-      // We need to access SavedAccounts but it's inside LandingPage. 
-      // Better way: App.vue manages this or LandingPage handles it.
-      // Since LandingPage is unmounted on success, we should save BEFORE emitting or App.vue handles it.
-      // Let's modify App.vue to save to localStorage manually OR use a global store.
-      // Actually, SavedAccounts uses useStorage internally, so we can just update that storage key!
       if (rememberMe) {
-          const saved = JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]')
-          const idx = saved.findIndex(a => a.email === email)
-          const newAcc = { 
-            email, 
-            password: password || '', // Only save password if provided
-            authKey: data.result.authKey, 
-            label: idx >= 0 ? saved[idx].label : email,
-            updatedAt: Date.now() 
+          const idx = savedAccounts.value.findIndex(a => (a.email || '').toLowerCase() === email.toLowerCase())
+          const newAcc = {
+            email,
+            authKey: data.result.authKey,
+            label: idx >= 0 ? (savedAccounts.value[idx].label || email) : email,
+            updatedAt: Date.now()
           }
-          if (idx >= 0) saved[idx] = { ...saved[idx], ...newAcc }
-          else saved.push(newAcc)
-          localStorage.setItem('sam_saved_accounts', JSON.stringify(saved))
+          if (idx >= 0) savedAccounts.value[idx] = { ...savedAccounts.value[idx], ...newAcc }
+          else savedAccounts.value.push(newAcc)
       }
       
       await loadAddons()
@@ -126,7 +118,6 @@ const syncAddons = async () => {
   }
 }
 
-// 4. This is the logout function called by both components
 const logout = () => {
   authKey.value = null
   currentSessionEmail.value = ''
@@ -136,6 +127,14 @@ const logout = () => {
 }
 
 onMounted(() => {
+  // Security hardening: drop any legacy persisted passwords from local storage records.
+  if (Array.isArray(savedAccounts.value)) {
+    savedAccounts.value = savedAccounts.value.map((account) => {
+      const { password, ...rest } = account || {}
+      return rest
+    })
+  }
+
   if (authKey.value) {
     loadAddons()
   } else {
@@ -169,7 +168,6 @@ onMounted(() => {
           @update:addons="addons = $event" 
           @sync="syncAddons" 
           @remove="addons.splice($event, 1)"
-          @logout="logout" 
         />
       </template>
     </main>

@@ -45,6 +45,7 @@ const emit = defineEmits(['close', 'confirm'])
         <button 
           @click="$emit('close')"
           type="button"
+          :disabled="isLoading"
           class="flex-1 px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors border border-zinc-200 dark:border-zinc-700"
         >
           {{ cancelText }}
@@ -52,6 +53,7 @@ const emit = defineEmits(['close', 'confirm'])
         <button 
           @click="$emit('confirm')"
           type="button"
+          :disabled="isLoading"
           class="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-all shadow-md active:scale-95"
           :class="type === 'danger' ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'"
         >

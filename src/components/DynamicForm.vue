@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import { ref, watch, computed } from 'vue'
 import Draggable from 'vuedraggable'
 import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X, Search, Grid, FileText, Copy, Check } from 'lucide-vue-next'
 import { useClipboard } from '@vueuse/core'

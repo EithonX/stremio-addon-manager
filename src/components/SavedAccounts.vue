@@ -1,19 +1,18 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { ChevronDown, Edit2, Trash2, User, Check } from 'lucide-vue-next'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ChevronDown, Edit2, Trash2, Check } from 'lucide-vue-next'
 import { useStorage } from '@vueuse/core'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 
 const emit = defineEmits(['selected'])
 
 // Use vueuse useStorage for easy persistence
-const savedAccounts = useStorage('sam_saved_accounts', []) // [{ email, label, password, authKey }]
+const savedAccounts = useStorage('sam_saved_accounts', []) // [{ email, label, authKey }]
 const DEFAULT_EMAIL = ''
 
 const defaultAccount = {
   email: DEFAULT_EMAIL,
   label: '-- Select Saved Account --',
-  password: '',
   authKey: '',
 }
 
@@ -25,7 +24,6 @@ const dropdownRef = ref(null)
 
 // Confirmation Modal State
 const showConfirm = ref(false)
-const confirmCallback = ref(null)
 
 // Computed
 const displayAccounts = computed(() => {
@@ -53,29 +51,6 @@ function selectAccount(email) {
   const account = savedAccounts.value.find(a => a.email === email) || { ...defaultAccount }
   emit('selected', account)
   isDropdownOpen.value = false
-}
-
-function saveAccount({ email, password, authKey, label }) {
-  const trimmedEmail = (email || '').trim()
-  if (!trimmedEmail) return
-
-  const existingIdx = savedAccounts.value.findIndex(a => a.email.toLowerCase() === trimmedEmail.toLowerCase())
-  
-  const newAccount = {
-    email: trimmedEmail,
-    label: (label || label === '') ? label : (existingIdx >= 0 ? savedAccounts.value[existingIdx].label : trimmedEmail),
-    password: password || '',
-    authKey: authKey || '',
-    updatedAt: Date.now()
-  }
-
-  if (existingIdx >= 0) {
-    savedAccounts.value[existingIdx] = { ...savedAccounts.value[existingIdx], ...newAccount }
-  } else {
-    // Default label if new
-    if (!newAccount.label) newAccount.label = trimmedEmail
-    savedAccounts.value.push(newAccount)
-  }
 }
 
 function confirmRemove() {
@@ -113,16 +88,19 @@ function handleClickOutside(event) {
 }
 
 onMounted(() => {
+  if (!Array.isArray(savedAccounts.value)) {
+    savedAccounts.value = []
+  } else {
+    savedAccounts.value = savedAccounts.value.map((account) => {
+      const { password, ...rest } = account || {}
+      return rest
+    })
+  }
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
-})
-
-// Expose methods for parent
-defineExpose({
-  save: saveAccount
 })
 </script>
 
@@ -174,7 +152,7 @@ defineExpose({
              <!-- Saved Accounts -->
              <button
                 v-for="acc in displayAccounts" 
-                :key="acc.account?.email || acc.email" 
+                :key="acc.email" 
                 @click="selectAccount(acc.email)"
                 type="button"
                 class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors"

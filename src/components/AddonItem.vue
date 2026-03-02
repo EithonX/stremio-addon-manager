@@ -8,10 +8,6 @@ const props = defineProps({
     type: Object,
     required: true
   },
-  index: {
-    type: Number,
-    required: true
-  },
   isLocked: {
     type: Boolean,
     default: false
@@ -29,9 +25,12 @@ const configureUrl = computed(() => {
   return props.addon.transportUrl.replace('stremio://', 'https://').replace('/manifest.json', '/configure')
 })
 
-const copyUrl = () => {
-  navigator.clipboard.writeText(props.addon.transportUrl)
-  alert('Manifest URL copied!') // Simple alert or use a toast if available
+const copyUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(props.addon.transportUrl)
+  } catch (error) {
+    alert('Failed to copy manifest URL. Please copy it manually.')
+  }
 }
 </script>
 

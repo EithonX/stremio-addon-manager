@@ -18,7 +18,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:addons', 'sync', 'logout', 'remove'])
+const emit = defineEmits(['update:addons', 'sync', 'remove'])
 
 // Local State
 const searchQuery = ref('')
@@ -89,28 +89,49 @@ const openAddModal = () => {
     newAddonUrl.value = ''
 }
 
-const installAddon = () => {
-    const url = newAddonUrl.value.trim()
-    if (!url) return 
+const normalizeManifestUrl = (rawUrl) => {
+  if (!rawUrl) return ''
+  let normalized = rawUrl.trim()
+  if (normalized.startsWith('stremio://')) {
+    normalized = `https://${normalized.slice('stremio://'.length)}`
+  }
+  try {
+    const parsed = new URL(normalized)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    return parsed.toString()
+  } catch {
+    return ''
+  }
+}
 
-    if (!url.startsWith('http')) {
-      alert('Invalid URL. Must start with http:// or https://')
+const installAddon = async () => {
+    const url = normalizeManifestUrl(newAddonUrl.value)
+    if (!url) {
+      alert('Invalid URL. Use a valid http(s) or stremio:// manifest URL.')
       return
     }
-    
-    fetch(url)
-      .then(res => res.json())
-      .then(manifest => {
-        const newAddons = [...props.addons, {
-          transportUrl: url,
-          manifest: manifest,
-          flags: {}
-        }]
-        emit('update:addons', newAddons)
-        isAddModalOpen.value = false
-        newAddonUrl.value = ''
-      })
-      .catch(e => alert(`Failed to load addon: ${e.message}`))
+
+    try {
+      const res = await fetch(url)
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
+      const manifest = await res.json()
+      if (!manifest || typeof manifest !== 'object' || !manifest.id || !manifest.version) {
+        throw new Error('Manifest payload is missing required fields (id/version).')
+      }
+
+      const newAddons = [...props.addons, {
+        transportUrl: url,
+        manifest,
+        flags: {}
+      }]
+      emit('update:addons', newAddons)
+      isAddModalOpen.value = false
+      newAddonUrl.value = ''
+    } catch (e) {
+      alert(`Failed to load addon: ${e.message}`)
+    }
 }
 
 const backupConfig = () => {
@@ -161,10 +182,6 @@ const restoreConfig = () => {
 
 <template>
   <div class="container mx-auto px-4 py-8 max-w-5xl">
-    <!-- Toolbar -->
-    <!-- Toolbar -->
-    <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
-    <!-- Toolbar -->
     <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
     <div class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center md:sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white dark:bg-zinc-900 md:bg-white/80 md:dark:bg-zinc-900/80 md:backdrop-blur-md">
       
@@ -257,7 +274,6 @@ const restoreConfig = () => {
         <template #item="{ element, index }">
           <AddonItem 
             :addon="element"
-            :index="index"
             :is-locked="isLocked"
             @remove="emit('remove', index)"
             @edit="handleEdit(index)"
@@ -271,7 +287,6 @@ const restoreConfig = () => {
             v-for="(element, index) in displayedAddons"
             :key="element.transportUrl"
             :addon="element"
-            :index="index"
             :is-locked="isLocked"
             @remove="handleRemove(index)"
             @edit="handleEdit(index)"
@@ -295,7 +310,6 @@ const restoreConfig = () => {
         </p>
         <input 
           v-model="newAddonUrl"
-          ref="addInputRef"
           placeholder="https://example.com/manifest.json" 
           class="input-field"
           @keyup.enter="installAddon"

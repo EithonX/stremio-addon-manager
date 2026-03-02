@@ -20,13 +20,11 @@ const copyToClipboard = (text) => {
   copy()
 }
 
-const savedAccountsRef = ref(null)
-
 const rememberMe = ref(false)
 
 const handleAccountSelect = (account) => {
   email.value = account.email || ''
-  password.value = account.password || ''
+  password.value = ''
   manualKey.value = account.authKey || ''
 }
 
@@ -65,7 +63,6 @@ onMounted(() => {
         
         <form @submit.prevent="handleLogin" class="space-y-4">
           <SavedAccounts 
-            ref="savedAccountsRef" 
             @selected="handleAccountSelect" 
             class="mb-4"
           />
@@ -112,7 +109,7 @@ onMounted(() => {
 
         <div class="flex items-start gap-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-xs leading-relaxed">
           <Shield class="w-4 h-4 mt-0.5 shrink-0" />
-          <p><strong>Secure:</strong> Credentials are encrypted and sent directly to Stremio via a secure tunnel. We never store them.</p>
+          <p><strong>Secure:</strong> Credentials are sent to Stremio for login only. We store your AuthKey locally, never your password.</p>
         </div>
       </div>
     </div>
@@ -224,7 +221,7 @@ onMounted(() => {
               <ArrowRight class="w-4 h-4 transition-transform group-open:rotate-90 text-zinc-400" />
             </summary>
             <div class="px-4 pb-4 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed border-t border-zinc-100 dark:border-zinc-800 pt-3">
-              Yes. We do not store them. They are used once to get an AuthKey, which is saved locally in your browser. Refreshing the page clears your password from memory.
+              Yes. Your password is not stored. It is used only to obtain an AuthKey, and only that AuthKey is saved locally in your browser for convenience.
             </div>
           </details>
 

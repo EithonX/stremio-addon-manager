@@ -27,8 +27,7 @@
   }
 
   .reorder-card {
-    @apply will-change-transform;
-    cursor: grab;
+    cursor: default;
     transition:
       transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
       border-color 180ms ease,
@@ -36,12 +35,15 @@
       background-color 180ms ease;
   }
 
-  .reorder-card:has(button:hover),
-  .reorder-card:has(a:hover),
-  .reorder-card:has(input:hover),
-  .reorder-card:has(textarea:hover),
-  .reorder-card:has(select:hover) {
-    cursor: default;
+  .drag-handle {
+    cursor: grab;
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
   }
 
   .reorder-list.is-dragging .reorder-card,
@@ -56,10 +58,12 @@
   .sortable-chosen {
     @apply border-blue-300 dark:border-blue-700;
     cursor: grabbing;
+    will-change: transform;
   }
 
   .sortable-drag {
     @apply opacity-100 shadow-none;
+    will-change: transform;
     transition: none !important;
   }
 
@@ -68,7 +72,6 @@
     box-shadow:
       0 18px 44px rgba(15, 23, 42, 0.18),
       0 8px 18px rgba(15, 23, 42, 0.12);
-    transform: scale(1.01);
     transition: none !important;
     pointer-events: none !important;
     z-index: 9999 !important;

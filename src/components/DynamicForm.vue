@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed, onUnmounted } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
 import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import AddonFeatures from './AddonFeatures.vue'
@@ -63,6 +64,7 @@ const confirmModal = ref({
 const dragTouchDelay = 180
 const dragTouchThreshold = 8
 const dragFallbackTolerance = 10
+const useFallbackDrag = useMediaQuery('(pointer: coarse)')
 
 // Initialize
 watch(() => props.manifest, (newManifest) => {
@@ -596,8 +598,8 @@ async function executeReset() {
             :swap-threshold="0.68"
             :scroll-sensitivity="80"
             :scroll-speed="14"
-            :force-fallback="true"
-            :fallback-on-body="true"
+            :force-fallback="useFallbackDrag"
+            :fallback-on-body="useFallbackDrag"
             :delay="dragTouchDelay"
             :delay-on-touch-only="true"
             :touch-start-threshold="dragTouchThreshold"

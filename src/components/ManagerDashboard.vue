@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onUnmounted, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
 import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock } from 'lucide-vue-next'
 import AddonItem from './AddonItem.vue'
@@ -67,6 +68,7 @@ const displayedAddons = computed(() => {
 const dragTouchDelay = 180
 const dragTouchThreshold = 8
 const dragFallbackTolerance = 10
+const useFallbackDrag = useMediaQuery('(pointer: coarse)')
 
 watch(
   () => props.addons,
@@ -303,8 +305,8 @@ onUnmounted(() => {
         :swap-threshold="0.68"
         :scroll-sensitivity="80"
         :scroll-speed="14"
-        :force-fallback="true"
-        :fallback-on-body="true"
+        :force-fallback="useFallbackDrag"
+        :fallback-on-body="useFallbackDrag"
         :delay="dragTouchDelay"
         :delay-on-touch-only="true"
         :touch-start-threshold="dragTouchThreshold"

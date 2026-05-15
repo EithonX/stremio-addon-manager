@@ -1,11 +1,12 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onUnmounted } from 'vue'
 import Draggable from 'vuedraggable'
-import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X, Search, Grid, FileText, Copy, Check } from 'lucide-vue-next'
+import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X, Search, Grid, FileText, Copy, Check, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import { useClipboard } from '@vueuse/core'
 import AddonFeatures from './AddonFeatures.vue'
 import Modal from './ui/Modal.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
+import { createEdgeDragScroll } from '../utils/edgeDragScroll'
 
 const props = defineProps({
   manifest: { type: Object, required: true },
@@ -24,6 +25,8 @@ const jsonModel = ref('')
 const initialManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
+const isCatalogDragging = ref(false)
+const catalogEdgeDragScroll = createEdgeDragScroll(() => document.querySelector('.custom-scrollbar'))
 
 // Cleanup/Optimization State to allow restoring within session
 const removedCapabilities = ref({
@@ -372,6 +375,31 @@ function deleteCatalog(index) {
   }
 }
 
+function moveCatalog(index, direction) {
+  const catalogs = formModel.value.catalogs
+  const nextIndex = index + direction
+  if (!Array.isArray(catalogs) || nextIndex < 0 || nextIndex >= catalogs.length) return
+
+  const [catalog] = catalogs.splice(index, 1)
+  catalogs.splice(nextIndex, 0, catalog)
+  syncJsonModel()
+}
+
+function handleCatalogDragEnd() {
+  isCatalogDragging.value = false
+  catalogEdgeDragScroll.stop()
+  syncJsonModel()
+}
+
+function handleCatalogDragStart() {
+  isCatalogDragging.value = true
+  catalogEdgeDragScroll.start()
+}
+
+onUnmounted(() => {
+  catalogEdgeDragScroll.stop()
+})
+
 // Basic Syntax Highlighting for JSON
 function highlightJson(json) {
   if (!json) return ''
@@ -586,13 +614,24 @@ async function executeReset() {
             item-key="__dragKey"
             handle=".drag-handle"
             ghost-class="sortable-ghost"
-            class="space-y-3"
-            :animation="200"
+            chosen-class="sortable-chosen"
+            drag-class="sortable-drag"
+            class="catalog-reorder-list flex flex-col gap-3"
+            :animation="220"
+            easing="cubic-bezier(0.22, 1, 0.36, 1)"
+            :swap-threshold="0.68"
+            :scroll-sensitivity="80"
+            :scroll-speed="14"
+            :class="{ 'is-dragging': isCatalogDragging }"
+            @start="handleCatalogDragStart"
+            @change="syncJsonModel"
+            @end="handleCatalogDragEnd"
+            @unchoose="catalogEdgeDragScroll.stop(); isCatalogDragging = false"
           >
             <template #item="{ element, index }">
-              <div class="group bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex items-center gap-2 md:gap-3 transition-all hover:border-blue-400 dark:hover:border-blue-600">
+              <div class="reorder-card group bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex items-center gap-2 md:gap-3 transition-all hover:border-blue-400 dark:hover:border-blue-600">
                 <!-- Drag Handle -->
-                <div class="drag-handle touch-none p-2 cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                <div class="drag-handle touch-none p-2 cursor-grab active:cursor-grabbing rounded-lg text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" role="button" aria-label="Drag catalog to reorder">
                   <Move class="w-4 h-4" />
                 </div>
                 
@@ -631,6 +670,27 @@ async function executeReset() {
                 >
                   <Trash2 class="w-4 h-4" />
                 </button>
+
+                <div class="flex flex-col gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    @click="moveCatalog(index, -1)"
+                    :disabled="index === 0"
+                    class="p-1 rounded-md text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-zinc-400 transition-colors"
+                    title="Move catalog up"
+                  >
+                    <ChevronUp class="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    @click="moveCatalog(index, 1)"
+                    :disabled="index === formModel.catalogs.length - 1"
+                    class="p-1 rounded-md text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-zinc-400 transition-colors"
+                    title="Move catalog down"
+                  >
+                    <ChevronDown class="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </template>
           </Draggable>

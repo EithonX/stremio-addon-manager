@@ -26,13 +26,68 @@
     @apply h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm md:text-base shadow-sm active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
   }
 
-  /* This single class handles the 'ghost' state (the item being dragged) */
+  .reorder-card {
+    @apply will-change-transform;
+    cursor: grab;
+    transition:
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease;
+  }
+
+  .reorder-card:has(button:hover),
+  .reorder-card:has(a:hover),
+  .reorder-card:has(input:hover),
+  .reorder-card:has(textarea:hover),
+  .reorder-card:has(select:hover) {
+    cursor: default;
+  }
+
+  .reorder-list.is-dragging .reorder-card,
+  .catalog-reorder-list.is-dragging .reorder-card {
+    @apply select-none;
+  }
+
   .sortable-ghost {
-    @apply bg-blue-50 dark:bg-blue-900/30 border border-blue-500/30 dark:border-blue-500/50 opacity-100 rounded-xl;
+    @apply opacity-20 shadow-none;
+  }
+
+  .sortable-chosen {
+    @apply border-blue-300 dark:border-blue-700;
+    cursor: grabbing;
   }
 
   .sortable-drag {
-    @apply opacity-0;
+    @apply opacity-100 shadow-none;
+  }
+}
+
+.reorder-list-move,
+.reorder-list-enter-active,
+.reorder-list-leave-active {
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
+.reorder-list-enter-from,
+.reorder-list-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+}
+
+.reorder-list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reorder-card,
+  .reorder-list-move,
+  .reorder-list-enter-active,
+  .reorder-list-leave-active {
+    transition: none;
   }
 }
 

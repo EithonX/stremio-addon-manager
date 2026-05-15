@@ -35,20 +35,26 @@ const copyUrl = async () => {
 </script>
 
 <template>
-  <div class="group relative flex flex-row items-center gap-3 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-blue-400 dark:hover:border-blue-600 transition-all shadow-sm">
+  <div class="reorder-card group relative flex flex-row items-center gap-3 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-blue-400 dark:hover:border-blue-600 transition-all shadow-sm">
     
     <!-- Drag Handle (Desktop) -->
     <div 
-      class="drag-handle touch-none sm:self-center p-1 rounded transition-colors hidden sm:block"
-      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500'"
+      class="drag-handle touch-none sm:self-center p-1.5 rounded-lg transition-colors hidden sm:block"
+      role="button"
+      aria-label="Drag addon to reorder"
+      :aria-disabled="isLocked"
+      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'"
     >
       <GripVertical class="w-5 h-5" />
     </div>
 
     <!-- Drag Handle (Mobile) -->
     <div 
-      class="drag-handle touch-none self-center p-1 -ml-1 rounded transition-colors sm:hidden"
-      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500'"
+      class="drag-handle touch-none self-center p-1.5 -ml-1 rounded-lg transition-colors sm:hidden"
+      role="button"
+      aria-label="Drag addon to reorder"
+      :aria-disabled="isLocked"
+      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'"
     >
       <GripVertical class="w-5 h-5" />
     </div>

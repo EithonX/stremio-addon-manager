@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import Draggable from 'vuedraggable'
 import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock } from 'lucide-vue-next'
 import AddonItem from './AddonItem.vue'
 import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
+import { createEdgeDragScroll } from '../utils/edgeDragScroll'
 
 const props = defineProps({
   addons: {
@@ -26,10 +27,12 @@ const isEditModalOpen = ref(false)
 const isAddModalOpen = ref(false)
 const newAddonUrl = ref('')
 const isLocked = ref(false)
+const isDragging = ref(false)
 
 const currentEditIndex = ref(null)
 const currentEditManifest = ref(null)
 const currentEditURL = ref('')
+const edgeDragScroll = createEdgeDragScroll(() => window)
 
 // Confirmation State
 const confirmModal = ref({
@@ -178,12 +181,30 @@ const restoreConfig = () => {
   }
   input.click()
 }
+
+function handleAddonDragStart() {
+  isDragging.value = true
+  edgeDragScroll.start()
+}
+
+function handleAddonDragEnd() {
+  isDragging.value = false
+  edgeDragScroll.stop()
+  emit('update:addons', props.addons)
+}
+
+onUnmounted(() => {
+  edgeDragScroll.stop()
+})
 </script>
 
 <template>
   <div class="container mx-auto px-4 py-8 max-w-5xl">
     <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
-    <div class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center md:sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white dark:bg-zinc-900 md:bg-white/80 md:dark:bg-zinc-900/80 md:backdrop-blur-md">
+    <div
+      class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center md:sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white dark:bg-zinc-900 md:bg-white/80 md:dark:bg-zinc-900/80 md:backdrop-blur-md transition-all duration-200 ease-out"
+      :class="isDragging ? 'opacity-0 pointer-events-none -translate-y-4 scale-[0.985]' : 'opacity-100 translate-y-0 scale-100'"
+    >
       
       <!-- Search Bar (Full width on mobile) -->
       <div class="w-full md:w-auto md:flex-1 md:max-w-md relative">
@@ -262,14 +283,23 @@ const restoreConfig = () => {
     <template v-else>
       <Draggable 
         v-if="canDrag"
-        :list="addons" 
+        :list="addons"
         item-key="transportUrl"
-        handle=".drag-handle"
+        filter="button,a,input,textarea,select,[data-no-drag]"
+        :prevent-on-filter="false"
         ghost-class="sortable-ghost"
+        chosen-class="sortable-chosen"
         drag-class="sortable-drag"
-        class="space-y-4 pb-20"
-        :animation="200"
-        @end="$emit('update:addons', addons)"
+        class="reorder-list flex flex-col gap-4 pb-20"
+        :animation="220"
+        easing="cubic-bezier(0.22, 1, 0.36, 1)"
+        :swap-threshold="0.68"
+        :scroll-sensitivity="80"
+        :scroll-speed="14"
+        :class="{ 'is-dragging': isDragging }"
+        @start="handleAddonDragStart"
+        @end="handleAddonDragEnd"
+        @unchoose="edgeDragScroll.stop(); isDragging = false"
       >
         <template #item="{ element, index }">
           <AddonItem 
@@ -282,7 +312,7 @@ const restoreConfig = () => {
       </Draggable>
 
       <!-- Read-only List when searching or locked -->
-      <div v-else class="space-y-4 pb-20">
+      <div v-else class="flex flex-col gap-4 pb-20">
          <AddonItem 
             v-for="(element, index) in displayedAddons"
             :key="element.transportUrl"

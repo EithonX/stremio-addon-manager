@@ -64,6 +64,10 @@ const displayedAddons = computed(() => {
   )
 })
 
+const dragTouchDelay = 180
+const dragTouchThreshold = 8
+const dragFallbackTolerance = 10
+
 watch(
   () => props.addons,
   (addons) => {
@@ -286,17 +290,25 @@ onUnmounted(() => {
         v-if="canDrag"
         :list="localAddons"
         item-key="transportUrl"
+        handle=".drag-handle"
         filter="button,a,input,textarea,select,[data-no-drag]"
         :prevent-on-filter="false"
         ghost-class="sortable-ghost"
         chosen-class="sortable-chosen"
         drag-class="sortable-drag"
+        fallback-class="sortable-fallback"
         class="reorder-list flex flex-col gap-4 pb-20"
         :animation="220"
         easing="cubic-bezier(0.22, 1, 0.36, 1)"
         :swap-threshold="0.68"
         :scroll-sensitivity="80"
         :scroll-speed="14"
+        :force-fallback="true"
+        :fallback-on-body="true"
+        :delay="dragTouchDelay"
+        :delay-on-touch-only="true"
+        :touch-start-threshold="dragTouchThreshold"
+        :fallback-tolerance="dragFallbackTolerance"
         :class="{ 'is-dragging': isDragging }"
         @start="handleAddonDragStart"
         @end="handleAddonDragEnd"

@@ -60,6 +60,10 @@ const confirmModal = ref({
   action: null
 })
 
+const dragTouchDelay = 180
+const dragTouchThreshold = 8
+const dragFallbackTolerance = 10
+
 // Initialize
 watch(() => props.manifest, (newManifest) => {
   const clone = JSON.parse(JSON.stringify(newManifest))
@@ -580,15 +584,24 @@ async function executeReset() {
             v-model="formModel.catalogs"
             item-key="__dragKey"
             handle=".drag-handle"
+            filter="button,a,input,textarea,select,label,[data-no-drag]"
+            :prevent-on-filter="false"
             ghost-class="sortable-ghost"
             chosen-class="sortable-chosen"
             drag-class="sortable-drag"
+            fallback-class="sortable-fallback"
             class="catalog-reorder-list flex flex-col gap-3"
             :animation="220"
             easing="cubic-bezier(0.22, 1, 0.36, 1)"
             :swap-threshold="0.68"
             :scroll-sensitivity="80"
             :scroll-speed="14"
+            :force-fallback="true"
+            :fallback-on-body="true"
+            :delay="dragTouchDelay"
+            :delay-on-touch-only="true"
+            :touch-start-threshold="dragTouchThreshold"
+            :fallback-tolerance="dragFallbackTolerance"
             :class="{ 'is-dragging': isCatalogDragging }"
             @start="handleCatalogDragStart"
             @change="syncJsonModel"

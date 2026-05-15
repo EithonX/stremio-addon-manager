@@ -26,7 +26,22 @@ const initialManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
 const isCatalogDragging = ref(false)
-const catalogEdgeDragScroll = createEdgeDragScroll(() => props.scrollContainer?.value ?? null)
+
+function resolveScrollContainer() {
+  const container = props.scrollContainer
+
+  if (container?.value instanceof HTMLElement) {
+    return container.value
+  }
+
+  if (container instanceof HTMLElement) {
+    return container
+  }
+
+  return null
+}
+
+const catalogEdgeDragScroll = createEdgeDragScroll(resolveScrollContainer)
 
 // Cleanup/Optimization State to allow restoring within session
 const removedCapabilities = ref({

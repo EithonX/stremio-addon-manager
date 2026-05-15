@@ -5,7 +5,12 @@ import { useClipboard, useWindowSize } from '@vueuse/core'
 import SavedAccounts from './SavedAccounts.vue'
 import { decryptAuthKey } from '../utils/cryptoVault'
 
-defineProps(['isLoading'])
+defineProps({
+  isLoading: {
+    type: Boolean,
+    default: false,
+  },
+})
 const emit = defineEmits(['login', 'loginKey'])
 
 const email = ref('')
@@ -214,8 +219,8 @@ watch(width, (value) => {
         </div>
 
         <div class="flex gap-2">
-          <input v-model="manualKey" type="password" placeholder="Paste AuthKey..." class="input-field" />
-          <button @click="$emit('loginKey', manualKey)" class="h-12 px-6 rounded-lg bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 text-white font-bold transition-colors">
+          <input v-model="manualKey" type="password" placeholder="Paste AuthKey..." class="input-field" @keyup.enter="handleLogin" />
+          <button type="button" @click="handleLogin" class="h-12 px-6 rounded-lg bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 text-white font-bold transition-colors">
             Go
           </button>
         </div>

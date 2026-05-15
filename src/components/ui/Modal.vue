@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -25,8 +25,18 @@ const emit = defineEmits(['close'])
 
 const isOpen = ref(props.show)
 const isVisible = ref(props.show)
+const contentRef = useTemplateRef('content')
+let closeTimerId = null
+
+function clearCloseTimer() {
+  if (closeTimerId !== null) {
+    clearTimeout(closeTimerId)
+    closeTimerId = null
+  }
+}
 
 watch(() => props.show, (val) => {
+  clearCloseTimer()
   if (val) {
     isOpen.value = true
     // Small delay to allow enter transition
@@ -37,12 +47,13 @@ watch(() => props.show, (val) => {
   } else {
     isVisible.value = false
     // Wait for transition to finish before hiding
-    setTimeout(() => {
+    closeTimerId = setTimeout(() => {
       isOpen.value = false
+      closeTimerId = null
     }, 300)
     document.body.style.overflow = ''
   }
-})
+}, { immediate: true })
 
 const close = () => {
   emit('close')
@@ -60,6 +71,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearCloseTimer()
   document.removeEventListener('keydown', handleKeydown)
   document.body.style.overflow = ''
 })
@@ -94,8 +106,8 @@ onUnmounted(() => {
         </div>
 
         <!-- Content (Scrollable) -->
-        <div class="flex-1 overflow-y-auto custom-scrollbar" :class="noPadding ? '' : 'p-6'">
-          <slot></slot>
+        <div ref="content" class="flex-1 overflow-y-auto custom-scrollbar" :class="noPadding ? '' : 'p-6'">
+          <slot :scroll-container="contentRef"></slot>
         </div>
 
         <!-- Footer (Optional) -->

@@ -10,6 +10,9 @@ import Footer from './components/Footer.vue'
 
 import SkeletonLoader from './components/ui/SkeletonLoader.vue'
 import { encryptAuthKey, hashAuthKey } from './utils/cryptoVault'
+import { normalizeAddonCollection } from './features/addons/addonCollection'
+import { useSavedAccounts } from './features/accounts/useSavedAccounts'
+import { useNotification } from './composables/useNotification'
 
 // Logic
 const API_BASE = "/api/"
@@ -17,10 +20,10 @@ const authKey = useStorage('stremio_auth_key', '')
 const step = ref(1)
 const isLoading = ref(false)
 const isAuthChecking = ref(true)
-const notification = ref({ show: false, type: '', message: '' })
 const addons = ref([])
 
-const savedAccounts = useStorage('sam_saved_accounts', [])
+const { savedAccounts, ensureNormalized, upsertSavedAccount } = useSavedAccounts()
+const { notification, notify } = useNotification()
 const currentSessionEmail = ref('')
 const currentAuthKeyHash = ref('')
 
@@ -35,11 +38,6 @@ const currentUserEmail = computed(() => {
   return account?.label || account?.email || 'Guest'
 })
 
-const notify = (type, msg) => {
-  notification.value = { show: true, type, message: msg }
-  setTimeout(() => notification.value.show = false, 4000)
-}
-
 const loadAddons = async () => {
   try {
     const res = await fetch(`${API_BASE}addonCollectionGet`, {
@@ -47,8 +45,8 @@ const loadAddons = async () => {
       body: JSON.stringify({ type: 'AddonCollectionGet', authKey: authKey.value, update: true })
     })
     const data = await res.json()
-    if (data.result?.addons) {
-      addons.value = data.result.addons
+    if (Array.isArray(data.result?.addons)) {
+      addons.value = normalizeAddonCollection(data.result.addons)
       step.value = 2
     } else {
       throw new Error("Session expired. Please login again.")
@@ -78,10 +76,11 @@ const login = async ({ email, password, rememberMe, protectWithPin, rememberPin 
       authKey.value = data.result.authKey
       currentSessionEmail.value = email
       if (rememberMe) {
-          const idx = savedAccounts.value.findIndex(a => (a.email || '').toLowerCase() === email.toLowerCase())
-          const existing = idx >= 0 ? savedAccounts.value[idx] : null
-          const authKeyHash = await hashAuthKey(data.result.authKey)
           const normalizedEmail = (email || '').trim()
+          const existing = savedAccounts.value.find(
+            (account) => account.email.toLowerCase() === normalizedEmail.toLowerCase(),
+          )
+          const authKeyHash = await hashAuthKey(data.result.authKey)
           const rememberSecurely = Boolean(protectWithPin)
 
           const newAcc = {
@@ -99,8 +98,7 @@ const login = async ({ email, password, rememberMe, protectWithPin, rememberPin 
             Object.assign(newAcc, encrypted)
           }
 
-          if (idx >= 0) savedAccounts.value[idx] = newAcc
-          else savedAccounts.value.push(newAcc)
+          upsertSavedAccount(newAcc)
       }
       
       await loadAddons()
@@ -149,35 +147,16 @@ const logout = () => {
   notify('success', 'Disconnected successfully')
 }
 
+const handleAddonsUpdate = (nextAddons) => {
+  addons.value = normalizeAddonCollection(nextAddons)
+}
+
+const removeAddon = (index) => {
+  addons.value = addons.value.filter((_, addonIndex) => addonIndex !== index)
+}
+
 onMounted(() => {
-  if (!Array.isArray(savedAccounts.value)) {
-    savedAccounts.value = []
-  } else {
-    // Security hardening: drop legacy password fields and normalize saved account shape.
-    savedAccounts.value = savedAccounts.value
-      .filter((account) => account && typeof account.email === 'string' && account.email.trim())
-      .map((account) => {
-        const clean = {
-          email: account.email.trim(),
-          label: account.label || account.email.trim(),
-          updatedAt: account.updatedAt || Date.now(),
-          authKeyHash: account.authKeyHash || '',
-          protected: Boolean(account.protected)
-        }
-
-        if (clean.protected && account.authKeyEncrypted && account.authKeyIv && account.authKeySalt) {
-          clean.authKeyEncrypted = account.authKeyEncrypted
-          clean.authKeyIv = account.authKeyIv
-          clean.authKeySalt = account.authKeySalt
-          clean.authKeyKdfIterations = account.authKeyKdfIterations || 310000
-        } else if (typeof account.authKey === 'string' && account.authKey) {
-          clean.authKey = account.authKey
-          clean.protected = false
-        }
-
-        return clean
-      })
-  }
+  ensureNormalized()
 
   if (authKey.value) {
     loadAddons()
@@ -221,9 +200,9 @@ watch(authKey, async (value) => {
           v-else 
           :addons="addons" 
           :isLoading="isLoading" 
-          @update:addons="addons = $event" 
+          @update:addons="handleAddonsUpdate" 
           @sync="syncAddons" 
-          @remove="addons.splice($event, 1)"
+          @remove="removeAddon"
         />
       </template>
     </main>

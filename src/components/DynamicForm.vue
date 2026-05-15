@@ -1,18 +1,18 @@
 <script setup>
 import { ref, watch, computed, onUnmounted } from 'vue'
 import Draggable from 'vuedraggable'
-import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, X, Search, Grid, FileText, Copy, Check, ChevronUp, ChevronDown } from 'lucide-vue-next'
-import { useClipboard } from '@vueuse/core'
+import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import AddonFeatures from './AddonFeatures.vue'
-import Modal from './ui/Modal.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { createEdgeDragScroll } from '../utils/edgeDragScroll'
+import ManifestJsonEditor from './editor/ManifestJsonEditor.vue'
 
 const props = defineProps({
   manifest: { type: Object, required: true },
   manifestURL: { type: String, default: '' },
   highlightCatalog: { type: [String, Object], default: null },
-  flags: { type: Object, default: () => ({}) }
+  flags: { type: Object, default: () => ({}) },
+  scrollContainer: { type: Object, default: null },
 })
 
 const emit = defineEmits(['update-manifest', 'cancel'])
@@ -26,7 +26,7 @@ const initialManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
 const isCatalogDragging = ref(false)
-const catalogEdgeDragScroll = createEdgeDragScroll(() => document.querySelector('.custom-scrollbar'))
+const catalogEdgeDragScroll = createEdgeDragScroll(() => props.scrollContainer?.value ?? null)
 
 // Cleanup/Optimization State to allow restoring within session
 const removedCapabilities = ref({
@@ -34,9 +34,6 @@ const removedCapabilities = ref({
   catalogs: [],
   meta: false
 })
-
-// Clipboard
-const { copy, copied } = useClipboard({ source: jsonModel })
 
 // Confirmation State
 const confirmModal = ref({
@@ -47,24 +44,6 @@ const confirmModal = ref({
   type: 'danger',
   action: null
 })
-
-const lineCount = computed(() => {
-  return jsonModel.value.split('\n').length
-})
-
-function handleInput(e) {
-  // Sync height of wrapper based on content
-  const textarea = e.target
-  const wrapper = textarea.parentElement
-  if(wrapper) {
-      wrapper.style.height = 'auto'
-      wrapper.style.height = textarea.scrollHeight + 'px'
-      
-      // Also sync width for horizontal scroll
-      wrapper.style.width = 'auto'
-      wrapper.style.width = textarea.scrollWidth + 'px'
-  }
-}
 
 // Initialize
 watch(() => props.manifest, (newManifest) => {
@@ -400,33 +379,6 @@ onUnmounted(() => {
   catalogEdgeDragScroll.stop()
 })
 
-// Basic Syntax Highlighting for JSON
-function highlightJson(json) {
-  if (!json) return ''
-  // Escape HTML
-  const escaped = json
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-
-  // Regex tokens
-  return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-    let cls = 'text-purple-600 dark:text-purple-400' // number
-    if (/^"/.test(match)) {
-      if (/:$/.test(match)) {
-        cls = 'text-blue-600 dark:text-blue-400 font-semibold' // key
-      } else {
-        cls = 'text-green-600 dark:text-green-400' // string
-      }
-    } else if (/true|false/.test(match)) {
-      cls = 'text-orange-600 dark:text-orange-400 font-bold' // boolean
-    } else if (/null/.test(match)) {
-      cls = 'text-red-500 dark:text-red-400 font-bold italic' // null
-    }
-    return '<span class="' + cls + '">' + match + '</span>'
-  })
-}
-
 // Reset Logic
 function handleReset() {
   confirmModal.value = {
@@ -702,46 +654,7 @@ async function executeReset() {
       </template>
 
       <!-- Advanced JSON Editor -->
-      <div v-else class="flex-1 flex relative font-mono text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden group focus-within:ring-2 focus-within:ring-blue-500 min-h-[500px]">
-         
-         <!-- Line Numbers -->
-         <div class="bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 text-right select-none px-2 py-4 border-r border-zinc-200 dark:border-zinc-700 min-w-[3rem]" aria-hidden="true">
-            <div v-for="n in lineCount" :key="n">{{ n }}</div>
-         </div>
-
-         <!-- Editor Area Container - Need scroll container here -->
-         <div class="relative flex-1 overflow-auto no-scrollbar">
-             <!-- Formatting Wrapper -->
-             <div class="relative min-w-full inline-block min-h-full">
-                 <!-- Highlights Overlay -->
-                 <pre 
-                  aria-hidden="true" 
-                  class="absolute inset-0 p-4 pointer-events-none whitespace-pre text-transparent z-0"
-                  style="font-family: inherit;"
-                  v-html="highlightJson(jsonModel)"
-                 ></pre>
-                 
-                 <!-- Textarea -->
-                 <textarea 
-                  v-model="jsonModel"
-                  class="w-full h-full absolute inset-0 bg-transparent text-transparent caret-zinc-900 dark:caret-white p-4 outline-none resize-none z-10 whitespace-pre overflow-hidden"
-                  style="font-family: inherit;"
-                  spellcheck="false"
-                  @input="handleInput"
-                ></textarea>
-             </div>
-         </div>
-
-         <!-- Copy Button -->
-         <button 
-           @click="copy(jsonModel)" 
-           class="absolute top-4 right-4 z-20 p-2 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors border border-zinc-200/50 dark:border-zinc-700/50"
-           title="Copy JSON"
-         >
-           <Check v-if="copied" class="w-4 h-4 text-emerald-500" />
-           <Copy v-else class="w-4 h-4" />
-         </button>
-      </div>
+      <ManifestJsonEditor v-else v-model="jsonModel" />
     </div>
 
     <!-- Footer Actions (Station) -->
@@ -789,10 +702,6 @@ async function executeReset() {
 </template>
 
 <style scoped>
-textarea {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; /* Nicer coding font if available */
-}
-
 /* Custom Scrollbar for this component */
 /* Only show custom scrollbars on devices with fine pointers (mouse) */
 @media (pointer: fine) {

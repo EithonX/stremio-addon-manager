@@ -1,20 +1,19 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ChevronDown, Edit2, Trash2, Check, Lock } from 'lucide-vue-next'
-import { useStorage } from '@vueuse/core'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
+import { useSavedAccounts } from '../features/accounts/useSavedAccounts'
 
 const emit = defineEmits(['selected'])
 
-// Use vueuse useStorage for easy persistence
-const savedAccounts = useStorage('sam_saved_accounts', []) // [{ email, label, authKey? , protected? , authKeyEncrypted? }]
-const DEFAULT_EMAIL = ''
-
-const defaultAccount = {
-  email: DEFAULT_EMAIL,
-  label: '-- Select Saved Account --',
-  authKey: '',
-}
+const {
+  savedAccounts,
+  defaultSavedAccount,
+  ensureNormalized,
+  removeSavedAccount,
+  renameSavedAccount,
+} = useSavedAccounts()
+const DEFAULT_EMAIL = defaultSavedAccount.email
 
 const selectedEmail = ref(DEFAULT_EMAIL)
 const isEditing = ref(false)
@@ -41,14 +40,14 @@ const selectedAccount = computed(() =>
 )
 
 const currentLabel = computed(() => {
-  if (selectedEmail.value === DEFAULT_EMAIL) return defaultAccount.label
+  if (selectedEmail.value === DEFAULT_EMAIL) return defaultSavedAccount.label
   return selectedAccount.value?.label || selectedAccount.value?.email || 'Unknown Account'
 })
 
 // Actions
 function selectAccount(email) {
   selectedEmail.value = email || DEFAULT_EMAIL
-  const account = savedAccounts.value.find(a => a.email === email) || { ...defaultAccount }
+  const account = savedAccounts.value.find(a => a.email === email) || { ...defaultSavedAccount }
   emit('selected', account)
   isDropdownOpen.value = false
 }
@@ -59,9 +58,9 @@ function confirmRemove() {
 }
 
 function handleRemoveConfirm() {
-  savedAccounts.value = savedAccounts.value.filter(a => a.email !== selectedEmail.value)
+  removeSavedAccount(selectedEmail.value)
   selectedEmail.value = DEFAULT_EMAIL
-  emit('selected', { ...defaultAccount })
+  emit('selected', { ...defaultSavedAccount })
   showConfirm.value = false
 }
 
@@ -73,10 +72,7 @@ function startRename() {
 
 function saveRename() {
   if (!selectedAccount.value) return
-  const idx = savedAccounts.value.findIndex(a => a.email === selectedEmail.value)
-  if (idx >= 0) {
-    savedAccounts.value[idx].label = editLabel.value || savedAccounts.value[idx].email
-  }
+  renameSavedAccount(selectedEmail.value, editLabel.value)
   isEditing.value = false
 }
 
@@ -88,14 +84,7 @@ function handleClickOutside(event) {
 }
 
 onMounted(() => {
-  if (!Array.isArray(savedAccounts.value)) {
-    savedAccounts.value = []
-  } else {
-    savedAccounts.value = savedAccounts.value.map((account) => {
-      const { password, ...rest } = account || {}
-      return rest
-    })
-  }
+  ensureNormalized()
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -145,7 +134,7 @@ onUnmounted(() => {
                 class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors"
                 :class="selectedEmail === DEFAULT_EMAIL ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'"
               >
-                <span>{{ defaultAccount.label }}</span>
+                <span>{{ defaultSavedAccount.label }}</span>
                 <Check v-if="selectedEmail === DEFAULT_EMAIL" class="w-4 h-4" />
               </button>
 

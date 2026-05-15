@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
 import Draggable from 'vuedraggable'
 import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock } from 'lucide-vue-next'
 import AddonItem from './AddonItem.vue'
@@ -7,6 +7,12 @@ import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { createEdgeDragScroll } from '../utils/edgeDragScroll'
+import {
+  normalizeAddonCollection,
+  normalizeAddonRecord,
+  normalizeManifestUrl,
+  parseAddonBackup,
+} from '../features/addons/addonCollection'
 
 const props = defineProps({
   addons: {
@@ -28,6 +34,7 @@ const isAddModalOpen = ref(false)
 const newAddonUrl = ref('')
 const isLocked = ref(false)
 const isDragging = ref(false)
+const localAddons = ref([])
 
 const currentEditIndex = ref(null)
 const currentEditManifest = ref(null)
@@ -48,19 +55,27 @@ const isSearching = computed(() => searchQuery.value.trim().length > 0)
 const canDrag = computed(() => !isSearching.value && !isLocked.value)
 
 const displayedAddons = computed(() => {
-  if (!isSearching.value) return props.addons
+  if (!isSearching.value) return localAddons.value
   const q = searchQuery.value.toLowerCase()
-  return props.addons.filter(addon => 
+  return localAddons.value.filter(addon => 
     addon.manifest.name.toLowerCase().includes(q) || 
-    addon.manifest.description?.toLowerCase().includes(q) ||
+    addon.manifest.description.toLowerCase().includes(q) ||
     addon.transportUrl.toLowerCase().includes(q)
   )
 })
 
+watch(
+  () => props.addons,
+  (addons) => {
+    localAddons.value = normalizeAddonCollection(addons)
+  },
+  { immediate: true },
+)
+
 // Actions
 const handleEdit = (index) => {
   const addon = displayedAddons.value[index]
-  const realIndex = props.addons.indexOf(addon)
+  const realIndex = localAddons.value.indexOf(addon)
   
   if (realIndex === -1) return
 
@@ -72,16 +87,19 @@ const handleEdit = (index) => {
 
 const handleRemove = (index) => {
   const addon = displayedAddons.value[index]
-  const realIndex = props.addons.indexOf(addon)
+  const realIndex = localAddons.value.indexOf(addon)
   if (realIndex !== -1) {
     emit('remove', realIndex)
   }
 }
 
 const handleSaveManifest = (newManifest) => {
-  const newAddons = [...props.addons]
+  const newAddons = [...localAddons.value]
   if (currentEditIndex.value !== null && newAddons[currentEditIndex.value]) {
-    newAddons[currentEditIndex.value].manifest = newManifest
+    newAddons[currentEditIndex.value] = {
+      ...newAddons[currentEditIndex.value],
+      manifest: newManifest,
+    }
     emit('update:addons', newAddons)
   }
   isEditModalOpen.value = false
@@ -90,21 +108,6 @@ const handleSaveManifest = (newManifest) => {
 const openAddModal = () => {
     isAddModalOpen.value = true
     newAddonUrl.value = ''
-}
-
-const normalizeManifestUrl = (rawUrl) => {
-  if (!rawUrl) return ''
-  let normalized = rawUrl.trim()
-  if (normalized.startsWith('stremio://')) {
-    normalized = `https://${normalized.slice('stremio://'.length)}`
-  }
-  try {
-    const parsed = new URL(normalized)
-    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
-    return parsed.toString()
-  } catch {
-    return ''
-  }
 }
 
 const installAddon = async () => {
@@ -120,15 +123,17 @@ const installAddon = async () => {
         throw new Error(`HTTP ${res.status}`)
       }
       const manifest = await res.json()
-      if (!manifest || typeof manifest !== 'object' || !manifest.id || !manifest.version) {
+      const nextAddon = normalizeAddonRecord({
+        transportUrl: url,
+        manifest,
+        flags: {},
+      })
+
+      if (!nextAddon) {
         throw new Error('Manifest payload is missing required fields (id/version).')
       }
 
-      const newAddons = [...props.addons, {
-        transportUrl: url,
-        manifest,
-        flags: {}
-      }]
+      const newAddons = [...localAddons.value, nextAddon]
       emit('update:addons', newAddons)
       isAddModalOpen.value = false
       newAddonUrl.value = ''
@@ -138,7 +143,7 @@ const installAddon = async () => {
 }
 
 const backupConfig = () => {
-  const data = JSON.stringify({ addons: props.addons }, null, 2)
+  const data = JSON.stringify({ addons: localAddons.value }, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -158,23 +163,19 @@ const restoreConfig = () => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target.result)
-        if (Array.isArray(data.addons)) {
-          confirmModal.value = {
-            show: true,
-            title: 'Restore Backup?',
-            message: `Replace current list with ${data.addons.length} addons from backup? This will overwrite your current list.`,
-            confirmText: 'Restore',
-            action: () => {
-              emit('update:addons', data.addons)
-              confirmModal.value.show = false
-            }
+        const restoredAddons = parseAddonBackup(JSON.parse(e.target.result))
+        confirmModal.value = {
+          show: true,
+          title: 'Restore Backup?',
+          message: `Replace current list with ${restoredAddons.length} addons from backup? This will overwrite your current list.`,
+          confirmText: 'Restore',
+          action: () => {
+            emit('update:addons', restoredAddons)
+            confirmModal.value.show = false
           }
-        } else {
-          alert('Invalid backup file format.')
         }
       } catch (err) {
-        alert('Failed to parse JSON.')
+        alert(err instanceof Error ? err.message : 'Failed to parse backup file.')
       }
     }
     reader.readAsText(file)
@@ -190,7 +191,7 @@ function handleAddonDragStart() {
 function handleAddonDragEnd() {
   isDragging.value = false
   edgeDragScroll.stop()
-  emit('update:addons', props.addons)
+  emit('update:addons', [...localAddons.value])
 }
 
 onUnmounted(() => {
@@ -266,7 +267,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Stats / Empty State -->
-    <div v-if="addons.length === 0" class="text-center py-20 animate-fade-in-up">
+    <div v-if="localAddons.length === 0" class="text-center py-20 animate-fade-in-up">
       <div class="bg-zinc-50 dark:bg-zinc-800/50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 border border-zinc-100 dark:border-zinc-700">
         <Upload class="w-10 h-10 text-zinc-400" />
       </div>
@@ -283,7 +284,7 @@ onUnmounted(() => {
     <template v-else>
       <Draggable 
         v-if="canDrag"
-        :list="addons"
+        :list="localAddons"
         item-key="transportUrl"
         filter="button,a,input,textarea,select,[data-no-drag]"
         :prevent-on-filter="false"
@@ -365,11 +366,13 @@ onUnmounted(() => {
       max-width="max-w-4xl"
       title="Edit Addon"
       no-padding
+      v-slot="{ scrollContainer }"
     >
       <DynamicForm 
         v-if="currentEditManifest"
         :manifest="currentEditManifest"
         :manifestURL="currentEditURL"
+        :scroll-container="scrollContainer"
         @update-manifest="handleSaveManifest"
         @cancel="isEditModalOpen = false"
       />

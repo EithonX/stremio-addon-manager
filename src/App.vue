@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { CheckCircle2, AlertCircle } from 'lucide-vue-next'
 
@@ -9,6 +9,7 @@ import ManagerDashboard from './components/ManagerDashboard.vue'
 import Footer from './components/Footer.vue'
 
 import SkeletonLoader from './components/ui/SkeletonLoader.vue'
+import ConfirmationModal from './components/ui/ConfirmationModal.vue'
 import { encryptAuthKey, hashAuthKey } from './utils/cryptoVault'
 import { normalizeAddonCollection } from './features/addons/addonCollection'
 import { getAddonCollection, loginToStremio, setAddonCollection } from './features/api/stremioApi'
@@ -21,11 +22,20 @@ const step = ref(1)
 const isLoading = ref(false)
 const isAuthChecking = ref(true)
 const addons = ref([])
+const syncedAddonsSnapshot = ref('[]')
 
 const { savedAccounts, ensureNormalized, upsertSavedAccount } = useSavedAccounts()
 const { notification, notify } = useNotification()
 const currentSessionEmail = ref('')
 const currentAuthKeyHash = ref('')
+const confirmationModal = ref({
+  show: false,
+  title: '',
+  message: '',
+  confirmText: 'Confirm',
+  type: 'danger',
+  action: null
+})
 
 const currentUserEmail = computed(() => {
   if (!authKey.value) return ''
@@ -38,12 +48,44 @@ const currentUserEmail = computed(() => {
   return account?.label || account?.email || 'Guest'
 })
 
+const createAddonsSnapshot = (nextAddons) => (
+  JSON.stringify(normalizeAddonCollection(nextAddons))
+)
+
+const hasUnsyncedChanges = computed(() => (
+  step.value === 2 &&
+  createAddonsSnapshot(addons.value) !== syncedAddonsSnapshot.value
+))
+
+const closeConfirmationModal = () => {
+  confirmationModal.value.show = false
+}
+
+const showConfirmation = ({ title, message, confirmText, type = 'danger', action }) => {
+  confirmationModal.value = {
+    show: true,
+    title,
+    message,
+    confirmText,
+    type,
+    action
+  }
+}
+
+const confirmPendingAction = () => {
+  const action = confirmationModal.value.action
+  closeConfirmationModal()
+  if (action) action()
+}
+
 const loadAddons = async () => {
   isLoading.value = true
   try {
     const data = await getAddonCollection(authKey.value)
     if (Array.isArray(data.result?.addons)) {
-      addons.value = normalizeAddonCollection(data.result.addons)
+      const normalizedAddons = normalizeAddonCollection(data.result.addons)
+      addons.value = normalizedAddons
+      syncedAddonsSnapshot.value = createAddonsSnapshot(normalizedAddons)
       step.value = 2
     } else {
       throw new Error("Session expired. Please login again.")
@@ -51,6 +93,8 @@ const loadAddons = async () => {
   } catch (e) {
     notify('error', e.message)
     authKey.value = null
+    addons.value = []
+    syncedAddonsSnapshot.value = '[]'
     step.value = 1
   } finally {
     isAuthChecking.value = false
@@ -116,6 +160,7 @@ const syncAddons = async () => {
   try {
     const data = await setAddonCollection(authKey.value, addons.value)
     if (data.result?.success) {
+      syncedAddonsSnapshot.value = createAddonsSnapshot(addons.value)
       notify('success', 'Library synced successfully!')
     } else {
       throw new Error("Sync failed.")
@@ -127,12 +172,43 @@ const syncAddons = async () => {
   }
 }
 
-const logout = () => {
+const performLogout = () => {
   authKey.value = null
   currentSessionEmail.value = ''
   addons.value = []
+  syncedAddonsSnapshot.value = '[]'
   step.value = 1
   notify('success', 'Disconnected successfully')
+}
+
+const logout = () => {
+  if (!hasUnsyncedChanges.value) {
+    performLogout()
+    return
+  }
+
+  showConfirmation({
+    title: 'Discard unsynced changes?',
+    message: 'You have local addon changes that have not been synced to Stremio. Logging out will discard them.',
+    confirmText: 'Discard and logout',
+    type: 'danger',
+    action: performLogout
+  })
+}
+
+const handleReloadRequest = () => {
+  if (!hasUnsyncedChanges.value) {
+    loadAddons()
+    return
+  }
+
+  showConfirmation({
+    title: 'Reload from Stremio?',
+    message: 'Reloading will replace your local unsynced changes with the current Stremio profile.',
+    confirmText: 'Reload anyway',
+    type: 'danger',
+    action: loadAddons
+  })
 }
 
 const handleAddonsUpdate = (nextAddons) => {
@@ -143,7 +219,14 @@ const removeAddon = (index) => {
   addons.value = addons.value.filter((_, addonIndex) => addonIndex !== index)
 }
 
+const handleBeforeUnload = (event) => {
+  if (!hasUnsyncedChanges.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
 onMounted(() => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   ensureNormalized()
 
   if (authKey.value) {
@@ -151,6 +234,10 @@ onMounted(() => {
   } else {
     isAuthChecking.value = false
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 
 watch(authKey, async (value) => {
@@ -188,13 +275,24 @@ watch(authKey, async (value) => {
           v-else 
           :addons="addons" 
           :isLoading="isLoading" 
+          :has-unsynced-changes="hasUnsyncedChanges"
           @update:addons="handleAddonsUpdate" 
           @sync="syncAddons" 
-          @reload="loadAddons"
+          @reload="handleReloadRequest"
           @remove="removeAddon"
         />
       </template>
     </main>
+
+    <ConfirmationModal
+      :show="confirmationModal.show"
+      :title="confirmationModal.title"
+      :message="confirmationModal.message"
+      :confirm-text="confirmationModal.confirmText"
+      :type="confirmationModal.type"
+      @close="closeConfirmationModal"
+      @confirm="confirmPendingAction"
+    />
 
     <Footer />
   </div>

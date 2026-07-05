@@ -2,7 +2,7 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
-import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock } from 'lucide-vue-next'
+import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, AlertTriangle } from 'lucide-vue-next'
 import AddonItem from './AddonItem.vue'
 import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
@@ -22,6 +22,10 @@ const props = defineProps({
     required: true
   },
   isLoading: {
+    type: Boolean,
+    default: false
+  },
+  hasUnsyncedChanges: {
     type: Boolean,
     default: false
   }
@@ -49,12 +53,14 @@ const confirmModal = ref({
   title: '',
   message: '',
   confirmText: 'Confirm',
+  type: 'info',
   action: null
 })
 
 // Computed
 const isSearching = computed(() => searchQuery.value.trim().length > 0)
 const canDrag = computed(() => !isSearching.value && !isLocked.value)
+const isSyncDisabled = computed(() => props.isLoading || !props.hasUnsyncedChanges)
 
 const displayedAddons = computed(() => {
   if (!isSearching.value) return localAddons.value
@@ -95,8 +101,19 @@ const handleEdit = (index) => {
 const handleRemove = (index) => {
   const addon = displayedAddons.value[index]
   const realIndex = localAddons.value.indexOf(addon)
-  if (realIndex !== -1) {
-    emit('remove', realIndex)
+  if (realIndex === -1) return
+
+  const addonName = addon?.manifest?.name || 'this addon'
+  confirmModal.value = {
+    show: true,
+    title: 'Remove addon?',
+    message: `Remove ${addonName} from your local list? You still need to sync changes to save this to Stremio.`,
+    confirmText: 'Remove',
+    type: 'danger',
+    action: () => {
+      emit('remove', realIndex)
+      confirmModal.value.show = false
+    }
   }
 }
 
@@ -172,6 +189,7 @@ const restoreConfig = () => {
           title: 'Restore Backup?',
           message: `Replace current list with ${restoredAddons.length} addons from backup? This will overwrite your current list.`,
           confirmText: 'Restore',
+          type: 'info',
           action: () => {
             emit('update:addons', restoredAddons)
             confirmModal.value.show = false
@@ -259,13 +277,27 @@ onUnmounted(() => {
 
         <button 
           @click="$emit('sync')" 
-          class="btn-primary h-9 md:h-10 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 flex-shrink-0" 
-          :disabled="isLoading"
+          class="btn-primary h-9 md:h-10 flex-shrink-0"
+          :class="hasUnsyncedChanges ? 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20' : 'bg-zinc-200 hover:bg-zinc-200 text-zinc-500 shadow-none dark:bg-zinc-800 dark:hover:bg-zinc-800 dark:text-zinc-400'"
+          :disabled="isSyncDisabled"
         >
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
-          <span class="hidden sm:inline">Sync to Stremio</span>
-          <span class="sm:hidden">Sync</span>
+          <span class="hidden sm:inline">{{ hasUnsyncedChanges ? 'Sync changes' : 'Synced' }}</span>
+          <span class="sm:hidden">{{ hasUnsyncedChanges ? 'Sync' : 'Synced' }}</span>
         </button>
+      </div>
+    </div>
+
+    <div
+      v-if="hasUnsyncedChanges"
+      class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+    >
+      <AlertTriangle class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-300" />
+      <div class="min-w-0">
+        <p class="text-sm font-bold">Unsynced changes</p>
+        <p class="text-sm text-amber-800 dark:text-amber-200">
+          Your local addon list has changes that are not saved to Stremio yet.
+        </p>
       </div>
     </div>
 
@@ -317,7 +349,7 @@ onUnmounted(() => {
           <AddonItem 
             :addon="element"
             :is-locked="isLocked"
-            @remove="emit('remove', index)"
+            @remove="handleRemove(index)"
             @edit="handleEdit(index)"
           />
         </template>
@@ -395,7 +427,7 @@ onUnmounted(() => {
       :title="confirmModal.title"
       :message="confirmModal.message"
       :confirm-text="confirmModal.confirmText"
-      type="info"
+      :type="confirmModal.type"
       @close="confirmModal.show = false"
       @confirm="confirmModal.action && confirmModal.action()"
     />

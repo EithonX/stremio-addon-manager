@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { hasManifestResource } from '../features/addons/addonCollection'
 
 const props = defineProps({
   manifest: {
@@ -17,23 +18,21 @@ const features = computed(() => {
   
   if (!props.manifest) return list
   
-  const resources = props.manifest.resources || []
-  const types = props.manifest.types || []
-  const catalogs = props.manifest.catalogs || []
+  const catalogs = Array.isArray(props.manifest.catalogs) ? props.manifest.catalogs : []
   
   if (catalogs.length > 0) {
     list.push({ label: 'Catalogs', color: 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' })
   }
   
-  if (resources.includes('stream')) {
+  if (hasManifestResource(props.manifest, 'stream')) {
     list.push({ label: 'Streams', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' })
   }
   
-  if (resources.includes('subtitles')) {
+  if (hasManifestResource(props.manifest, 'subtitles')) {
     list.push({ label: 'Subtitles', color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' })
   }
   
-  if (resources.includes('meta')) {
+  if (hasManifestResource(props.manifest, 'meta')) {
     list.push({ label: 'Metadata', color: 'bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400' })
   }
   

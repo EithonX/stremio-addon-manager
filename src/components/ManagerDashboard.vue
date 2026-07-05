@@ -26,7 +26,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:addons', 'sync', 'remove'])
+const emit = defineEmits(['update:addons', 'sync', 'reload', 'remove'])
 
 // Local State
 const searchQuery = ref('')
@@ -279,10 +279,10 @@ onUnmounted(() => {
       </div>
       <h3 class="text-xl font-bold text-zinc-900 dark:text-white mb-2">No addons loaded</h3>
       <p class="text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto mb-8">
-        Your list is empty. Sync to import your current profile from Stremio, or add addons manually.
+        Your list is empty. Reload to import your current profile from Stremio, or add addons manually.
       </p>
-      <button @click="$emit('sync')" class="btn-primary mx-auto">
-        <RefreshCw class="w-4 h-4" /> Load from Stremio
+      <button @click="$emit('reload')" class="btn-primary mx-auto" :disabled="isLoading">
+        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" /> Reload from Stremio
       </button>
     </div>
 

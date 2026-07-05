@@ -39,6 +39,7 @@ const currentUserEmail = computed(() => {
 })
 
 const loadAddons = async () => {
+  isLoading.value = true
   try {
     const res = await fetch(`${API_BASE}addonCollectionGet`, {
       method: 'POST',
@@ -57,6 +58,7 @@ const loadAddons = async () => {
     step.value = 1
   } finally {
     isAuthChecking.value = false
+    isLoading.value = false
   }
 }
 
@@ -114,9 +116,7 @@ const login = async ({ email, password, rememberMe, protectWithPin, rememberPin 
 
 const loginKey = async (key) => {
   authKey.value = key
-  isLoading.value = true
   await loadAddons()
-  isLoading.value = false
 }
 
 const syncAddons = async () => {
@@ -202,6 +202,7 @@ watch(authKey, async (value) => {
           :isLoading="isLoading" 
           @update:addons="handleAddonsUpdate" 
           @sync="syncAddons" 
+          @reload="loadAddons"
           @remove="removeAddon"
         />
       </template>

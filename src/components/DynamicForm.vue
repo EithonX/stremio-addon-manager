@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
 import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown } from 'lucide-vue-next'
@@ -7,6 +7,15 @@ import AddonFeatures from './AddonFeatures.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { createEdgeDragScroll } from '../utils/edgeDragScroll'
 import ManifestJsonEditor from './editor/ManifestJsonEditor.vue'
+import {
+  deepClone,
+  findCatalogBackup,
+  findManifestResource,
+  getCatalogBackupKey,
+  hasManifestResource,
+  removeManifestResource,
+  restoreCatalogExtraBackups,
+} from '../features/addons/addonCollection'
 
 const props = defineProps({
   manifest: { type: Object, required: true },
@@ -24,9 +33,26 @@ const formModel = ref({
 })
 const jsonModel = ref('')
 const initialManifest = ref(null)
+const sanitizeBaseManifest = ref(null)
 const isResetting = ref(false)
 const hasUnsavedChanges = ref(false)
 const isCatalogDragging = ref(false)
+
+const DEFAULT_MANIFEST = {
+  name: '',
+  description: '',
+  logo: '',
+  background: '',
+  catalogs: [],
+  resources: [],
+}
+
+const OPTIONAL_DEFAULT_FIELDS = {
+  logo: '',
+  background: '',
+  catalogs: [],
+  resources: [],
+}
 
 function resolveScrollContainer() {
   const container = props.scrollContainer
@@ -48,7 +74,7 @@ const catalogEdgeDragScroll = createEdgeDragScroll(resolveScrollContainer)
 const removedCapabilities = ref({
   search: [],
   catalogs: [],
-  meta: false
+  meta: null
 })
 
 // Confirmation State
@@ -66,17 +92,81 @@ const dragTouchThreshold = 8
 const dragFallbackTolerance = 10
 const useFallbackDrag = useMediaQuery('(pointer: coarse)')
 
+function normalizeEditableManifest(manifest) {
+  const clone = manifest && typeof manifest === 'object' && !Array.isArray(manifest) ? deepClone(manifest) : {}
+
+  return {
+    ...DEFAULT_MANIFEST,
+    ...clone,
+    catalogs: Array.isArray(clone.catalogs) ? clone.catalogs.filter(isEditableCatalog) : [],
+    resources: Array.isArray(clone.resources) ? clone.resources : [],
+  }
+}
+
+function isEditableCatalog(catalog) {
+  return catalog !== null && typeof catalog === 'object' && !Array.isArray(catalog)
+}
+
+function hasOwnField(source, field) {
+  return source !== null && typeof source === 'object' && Object.prototype.hasOwnProperty.call(source, field)
+}
+
+function isDefaultEmptyField(value, defaultValue) {
+  if (Array.isArray(defaultValue)) {
+    return Array.isArray(value) && value.length === 0
+  }
+
+  return value === defaultValue
+}
+
+function pruneUnchangedDefaultFields(manifest, baseManifest = sanitizeBaseManifest.value) {
+  Object.entries(OPTIONAL_DEFAULT_FIELDS).forEach(([field, defaultValue]) => {
+    if (!hasOwnField(baseManifest, field) && isDefaultEmptyField(manifest[field], defaultValue)) {
+      delete manifest[field]
+    }
+  })
+
+  return manifest
+}
+
+function createCatalogBackup(catalog, index, extra) {
+  return {
+    backupKey: getCatalogBackupKey(catalog, index),
+    originalIndex: index,
+    id: catalog?.id,
+    type: catalog?.type,
+    extra: deepClone(extra),
+  }
+}
+
+function getCatalogs() {
+  if (!Array.isArray(formModel.value.catalogs)) {
+    formModel.value.catalogs = []
+  }
+
+  return formModel.value.catalogs
+}
+
+function getResources() {
+  if (!Array.isArray(formModel.value.resources)) {
+    formModel.value.resources = []
+  }
+
+  return formModel.value.resources
+}
+
 // Initialize
 watch(() => props.manifest, (newManifest) => {
-  const clone = JSON.parse(JSON.stringify(newManifest))
+  sanitizeBaseManifest.value = newManifest && typeof newManifest === 'object' ? deepClone(newManifest) : {}
+  const clone = normalizeEditableManifest(newManifest)
   ensureCatalogDragKeys(clone.catalogs)
   formModel.value = clone
   syncJsonModel()
-  initialManifest.value = JSON.parse(JSON.stringify(clone))
+  initialManifest.value = deepClone(clone)
   hasUnsavedChanges.value = false
   
   // Reset removed state on new manifest load
-  removedCapabilities.value = { search: [], catalogs: [], meta: false }
+  removedCapabilities.value = { search: [], catalogs: [], meta: null }
 }, { immediate: true })
 
 // Deep watch for changes
@@ -89,7 +179,7 @@ function checkForChanges() {
   let currentState, initialState
   try {
     if (isAdvancedMode.value) {
-      currentState = JSON.stringify(JSON.parse(jsonModel.value))
+      currentState = JSON.stringify(toSanitizedManifest(JSON.parse(jsonModel.value)))
       initialState = JSON.stringify(toSanitizedManifest(initialManifest.value))
     } else {
       currentState = JSON.stringify(toSanitizedManifest(formModel.value))
@@ -102,11 +192,11 @@ function checkForChanges() {
 }
 
 function toSanitizedManifest(model) {
-  const clone = JSON.parse(JSON.stringify(model))
+  const clone = normalizeEditableManifest(model)
   if (Array.isArray(clone.catalogs)) {
     clone.catalogs.forEach(c => delete c.__dragKey)
   }
-  return clone
+  return pruneUnchangedDefaultFields(clone)
 }
 
 function syncJsonModel() {
@@ -117,6 +207,7 @@ function ensureCatalogDragKeys(catalogs) {
   if (!Array.isArray(catalogs)) return
   const stamp = Date.now()
   catalogs.forEach((c, idx) => {
+    if (!c || typeof c !== 'object') return
     if (!c.__dragKey) c.__dragKey = `${c.type}-${stamp}-${idx}-${Math.random().toString(36).slice(2, 6)}`
   })
 }
@@ -126,8 +217,9 @@ function toggleEditMode() {
     // Switch to Form
     try {
       const parsed = JSON.parse(jsonModel.value)
-      ensureCatalogDragKeys(parsed.catalogs)
-      formModel.value = parsed
+      const normalized = normalizeEditableManifest(parsed)
+      ensureCatalogDragKeys(normalized.catalogs)
+      formModel.value = normalized
       isAdvancedMode.value = false
     } catch (e) {
       alert('Invalid JSON. Please fix errors before switching.')
@@ -154,21 +246,22 @@ function handleSubmit() {
 
 // Optimization Helpers
 function isSearchExtra(extra) {
-  return extra.name === 'search'
+  return extra?.name === 'search'
 }
 
 function hasSearchExtra(catalog) {
-  return catalog.extra?.some(isSearchExtra)
+  return Array.isArray(catalog?.extra) && catalog.extra.some(isSearchExtra)
 }
 
 function isDedicatedSearch(catalog) {
   // Considered dedicated if it HAS search extra AND (it's the only extra OR name implies search)
   // Also if search is required, it's likely dedicated/search-only behavior
   if (!hasSearchExtra(catalog)) return false
-  const search = catalog.extra.find(isSearchExtra)
-  if (search.isRequired) return true
-  if (catalog.extra.length === 1) return true
-  if (catalog.name.toLowerCase().includes('search')) return true
+  const extras = Array.isArray(catalog?.extra) ? catalog.extra : []
+  const search = extras.find(isSearchExtra)
+  if (search?.isRequired) return true
+  if (extras.length === 1) return true
+  if (String(catalog?.name ?? '').toLowerCase().includes('search')) return true
   return false
 }
 
@@ -179,7 +272,7 @@ function isHybridSearch(catalog) {
 function hasCapability(type) {
   if (type === 'search') {
     // Has capability if any catalog provides search (Dedicated or Hybrid)
-    return formModel.value.catalogs?.some(hasSearchExtra)
+    return getCatalogs().some(hasSearchExtra)
   }
   if (type === 'catalogs') {
     // Has capability if any catalog provides content (Hybrid or Content-Only)
@@ -187,10 +280,10 @@ function hasCapability(type) {
     // Basically: Any catalog that is NOT Dedicated Search (which is invisible anyway usually)
     // Or more strictly: Any catalog that has non-search extras OR no extras?
     // Let's simpler: If it's NOT dedicated search, it's a content catalog.
-    return formModel.value.catalogs?.some(c => !isDedicatedSearch(c))
+    return getCatalogs().some(c => !isDedicatedSearch(c))
   }
   if (type === 'meta') {
-    return formModel.value.resources?.includes('meta')
+    return hasManifestResource(formModel.value, 'meta')
   }
   return false
 }
@@ -207,15 +300,15 @@ function toggleOptimization(type) {
       const dedicated = []
       const hybridBackups = [] // { index, extra }
       
-      formModel.value.catalogs = formModel.value.catalogs.filter((c, idx) => {
+      formModel.value.catalogs = getCatalogs().filter((c, index) => {
         if (isDedicatedSearch(c)) {
-          dedicated.push(c)
+          dedicated.push(deepClone(c))
           return false // Remove
         }
         if (isHybridSearch(c)) {
           // Strip search extra
           const searchExtra = c.extra.find(isSearchExtra)
-          hybridBackups.push({ id: c.id, type: c.type, extra: searchExtra })
+          hybridBackups.push(createCatalogBackup(c, index, searchExtra))
           c.extra = c.extra.filter(e => !isSearchExtra(e))
           return true // Keep
         }
@@ -230,16 +323,16 @@ function toggleOptimization(type) {
       const { dedicated, hybridBackups } = removedCapabilities.value.search
       
       if (dedicated && dedicated.length) {
-        formModel.value.catalogs.push(...dedicated)
+        formModel.value.catalogs.push(...deepClone(dedicated))
       }
       
       if (hybridBackups && hybridBackups.length) {
-        formModel.value.catalogs.forEach(c => {
+        getCatalogs().forEach((c, index) => {
           // Find matching backup
-          const backup = hybridBackups.find(b => b.id === c.id && b.type === c.type)
+          const backup = findCatalogBackup(c, index, hybridBackups)
           if (backup && !hasSearchExtra(c)) {
             if (!c.extra) c.extra = []
-            c.extra.push(backup.extra)
+            c.extra.push(deepClone(backup.extra))
           }
         })
       }
@@ -257,23 +350,23 @@ function toggleOptimization(type) {
       const contentOnly = []
       const hybridBackups = [] 
       
-      formModel.value.catalogs = formModel.value.catalogs.filter(c => {
+      formModel.value.catalogs = getCatalogs().filter((c, index) => {
         if (isDedicatedSearch(c)) return true // Keep dedicated search
         
         if (hasSearchExtra(c)) {
           // Hybrid: Become Search-Only
           // Backup original extras
-          hybridBackups.push({ id: c.id, type: c.type, extra: [...c.extra] })
+          hybridBackups.push(createCatalogBackup(c, index, c.extra))
           
           // Keep ONLY search extra
-          const searchExtra = c.extra.find(isSearchExtra)
+          const searchExtra = deepClone(c.extra.find(isSearchExtra))
           // Force isRequired = true to likely hide from Home
           searchExtra.isRequired = true 
           c.extra = [searchExtra]
           return true
         } else {
           // Content-Only: Delete
-          contentOnly.push(c)
+          contentOnly.push(deepClone(c))
           return false
         }
       })
@@ -284,32 +377,27 @@ function toggleOptimization(type) {
       const { contentOnly, hybridBackups } = removedCapabilities.value.catalogs
       
       if (contentOnly && contentOnly.length) {
-        formModel.value.catalogs.push(...contentOnly)
+        formModel.value.catalogs.push(...deepClone(contentOnly))
       }
       
       if (hybridBackups && hybridBackups.length) {
-        formModel.value.catalogs.forEach(c => {
-          const backup = hybridBackups.find(b => b.id === c.id && b.type === c.type)
-          if (backup) {
-            // Restore full extras
-            c.extra = backup.extra
-          }
-        })
+        restoreCatalogExtraBackups(getCatalogs(), hybridBackups)
       }
       removedCapabilities.value.catalogs = []
     }
   }
   
   if (type === 'meta') {
-    const r = formModel.value.resources || []
     if (enabled) {
       // Disable: remove 'meta'
-      formModel.value.resources = r.filter(x => x !== 'meta')
-      removedCapabilities.value.meta = true
+      removedCapabilities.value.meta = deepClone(findManifestResource(formModel.value, 'meta') ?? 'meta')
+      formModel.value.resources = removeManifestResource(formModel.value, 'meta').resources
     } else {
       // Enable: add 'meta' (if it was removed or just add it)
-      if (!r.includes('meta')) formModel.value.resources.push('meta')
-      removedCapabilities.value.meta = false
+      if (!hasManifestResource(formModel.value, 'meta')) {
+        getResources().push(deepClone(removedCapabilities.value.meta ?? 'meta'))
+      }
+      removedCapabilities.value.meta = null
     }
   }
   
@@ -318,22 +406,22 @@ function toggleOptimization(type) {
 
 // Catalog Helpers
 function hasSystemExtra(catalog) {
-  if (!Array.isArray(catalog.extra)) return false
-  return catalog.extra.some(e => ['lastVideosIds', 'calendarVideosIds'].includes(e.name))
+  if (!Array.isArray(catalog?.extra)) return false
+  return catalog.extra.some(e => ['lastVideosIds', 'calendarVideosIds'].includes(e?.name))
 }
 
 
 
 function isCatalogVisible(catalog) {
   if (hasSearchExtra(catalog)) {
-    const search = catalog.extra.find(e => e.name === 'search')
+    const search = catalog.extra.find(e => e?.name === 'search')
     return search && !search.isRequired
   }
-  if (catalog.extra?.some(e => e.name === 'genre')) {
-    const genre = catalog.extra.find(e => e.name === 'genre')
+  if (catalog?.extra?.some(e => e?.name === 'genre')) {
+    const genre = catalog.extra.find(e => e?.name === 'genre')
     return genre && !genre.isRequired
   }
-  return !catalog.extra?.length // Visible by default if no extras
+  return !catalog?.extra?.length // Visible by default if no extras
 }
 
 function toggleCatalogVisibility(catalog) {
@@ -341,14 +429,14 @@ function toggleCatalogVisibility(catalog) {
   if (!Array.isArray(catalog.extra)) catalog.extra = []
   
   // Search Extra Logic
-  const searchExtra = catalog.extra.find(e => e.name === 'search')
+  const searchExtra = catalog.extra.find(e => e?.name === 'search')
   if (searchExtra) {
     if (isVisible) searchExtra.isRequired = true // Hide
     else delete searchExtra.isRequired // Show
   }
   
   // Genre Extra Logic
-  const genreExtra = catalog.extra.find(e => e.name === 'genre')
+  const genreExtra = catalog.extra.find(e => e?.name === 'genre')
   if (genreExtra) {
     if (isVisible) genreExtra.isRequired = true // Hide
     else delete genreExtra.isRequired // Show
@@ -376,7 +464,7 @@ function deleteCatalog(index) {
 }
 
 function moveCatalog(index, direction) {
-  const catalogs = formModel.value.catalogs
+  const catalogs = getCatalogs()
   const nextIndex = index + direction
   if (!Array.isArray(catalogs) || nextIndex < 0 || nextIndex >= catalogs.length) return
 
@@ -431,7 +519,8 @@ async function executeReset() {
     // 3. Verify it's a valid manifest
     if (!data.id || !data.version) throw new Error('Invalid manifest response')
 
-    const clone = JSON.parse(JSON.stringify(data))
+    sanitizeBaseManifest.value = deepClone(data)
+    const clone = normalizeEditableManifest(data)
     ensureCatalogDragKeys(clone.catalogs)
     formModel.value = clone
     syncJsonModel()

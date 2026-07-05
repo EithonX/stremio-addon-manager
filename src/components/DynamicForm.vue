@@ -16,6 +16,7 @@ import {
   removeManifestResource,
   restoreCatalogExtraBackups,
 } from '../features/addons/addonCollection'
+import { fetchAddonManifest } from '../features/api/stremioApi'
 
 const props = defineProps({
   manifest: { type: Object, required: true },
@@ -505,18 +506,9 @@ async function executeReset() {
   isResetting.value = true
   
   try {
-    // 1. Convert stremio:// to https://
-    let url = props.manifestURL.replace('stremio://', 'https://')
+    const data = await fetchAddonManifest(props.manifestURL)
     
-    // 2. Add timestamp to bypass cache
-    const separator = url.includes('?') ? '&' : '?'
-    const fetchUrl = `${url}${separator}t=${Date.now()}`
-    
-    const res = await fetch(fetchUrl)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    
-    // 3. Verify it's a valid manifest
+    // Verify it's a valid manifest
     if (!data.id || !data.version) throw new Error('Invalid manifest response')
 
     sanitizeBaseManifest.value = deepClone(data)
@@ -525,7 +517,7 @@ async function executeReset() {
     formModel.value = clone
     syncJsonModel()
     
-    // 4. Update initialManifest so "Save" button becomes disabled if it matches original
+    // Update initialManifest so "Save" button becomes disabled if it matches original
     hasUnsavedChanges.value = true 
     
   } catch(e) {

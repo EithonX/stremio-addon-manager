@@ -14,6 +14,7 @@ import {
   normalizeManifestUrl,
   parseAddonBackup,
 } from '../features/addons/addonCollection'
+import { fetchAddonManifest } from '../features/api/stremioApi'
 
 const props = defineProps({
   addons: {
@@ -124,11 +125,7 @@ const installAddon = async () => {
     }
 
     try {
-      const res = await fetch(url)
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`)
-      }
-      const manifest = await res.json()
+      const manifest = await fetchAddonManifest(url)
       const nextAddon = normalizeAddonRecord({
         transportUrl: url,
         manifest,

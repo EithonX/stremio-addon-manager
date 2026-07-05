@@ -59,7 +59,14 @@ Stremio natively locks addons in the order of installation. To move a catalog up
 
 ### Local Development
 
-Because this project uses a Cloudflare Worker (Function) to handle CORS securely, you cannot just use `npm run dev`. You must use **Wrangler** to simulate the production environment.
+Because this project uses Cloudflare Pages Functions for `/api/login`, `/api/addonCollectionGet`, `/api/addonCollectionSet`, and `/api/manifest`, `npm run dev` is only useful for static UI work. It does not run the API proxy, so addon manifest loading through `/api/manifest` requires Wrangler.
+
+Use the Pages dev command:
+```bash
+npm run dev:pages
+```
+
+Or run the steps manually:
 
 1. **Build the project:**
 ```bash

@@ -11,11 +11,11 @@ import Footer from './components/Footer.vue'
 import SkeletonLoader from './components/ui/SkeletonLoader.vue'
 import { encryptAuthKey, hashAuthKey } from './utils/cryptoVault'
 import { normalizeAddonCollection } from './features/addons/addonCollection'
+import { getAddonCollection, loginToStremio, setAddonCollection } from './features/api/stremioApi'
 import { useSavedAccounts } from './features/accounts/useSavedAccounts'
 import { useNotification } from './composables/useNotification'
 
 // Logic
-const API_BASE = "/api/"
 const authKey = useStorage('stremio_auth_key', '')
 const step = ref(1)
 const isLoading = ref(false)
@@ -41,11 +41,7 @@ const currentUserEmail = computed(() => {
 const loadAddons = async () => {
   isLoading.value = true
   try {
-    const res = await fetch(`${API_BASE}addonCollectionGet`, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'AddonCollectionGet', authKey: authKey.value, update: true })
-    })
-    const data = await res.json()
+    const data = await getAddonCollection(authKey.value)
     if (Array.isArray(data.result?.addons)) {
       addons.value = normalizeAddonCollection(data.result.addons)
       step.value = 2
@@ -65,11 +61,7 @@ const loadAddons = async () => {
 const login = async ({ email, password, rememberMe, protectWithPin, rememberPin }) => {
   isLoading.value = true
   try {
-    const res = await fetch(`${API_BASE}login`, {
-      method: 'POST',
-      body: JSON.stringify({ email, password })
-    })
-    const data = await res.json()
+    const data = await loginToStremio(email, password)
     if (data.result?.authKey) {
       if (rememberMe && protectWithPin && (!rememberPin || rememberPin.length < 4)) {
         throw new Error('PIN must be at least 4 characters to protect saved AuthKey.')
@@ -122,11 +114,7 @@ const loginKey = async (key) => {
 const syncAddons = async () => {
   isLoading.value = true
   try {
-    const res = await fetch(`${API_BASE}addonCollectionSet`, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'AddonCollectionSet', authKey: authKey.value, addons: addons.value })
-    })
-    const data = await res.json()
+    const data = await setAddonCollection(authKey.value, addons.value)
     if (data.result?.success) {
       notify('success', 'Library synced successfully!')
     } else {

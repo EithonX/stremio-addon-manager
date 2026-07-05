@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { GripVertical, Trash2, ExternalLink, ShieldCheck, Copy, Settings } from 'lucide-vue-next'
 import AddonFeatures from './AddonFeatures.vue'
 
@@ -19,6 +19,18 @@ const emit = defineEmits(['remove', 'edit'])
 const manifest = computed(() => props.addon.manifest || {})
 const isProtected = computed(() => props.addon.flags?.protected)
 const logo = computed(() => manifest.value.logo || 'https://www.stremio.com/website/stremio-logo-small.png')
+const logoFailed = shallowRef(false)
+
+const displayInitial = computed(() => ((manifest.value.name || '').trim().charAt(0) || '?').toUpperCase())
+
+const manifestDomain = computed(() => {
+  if (!props.addon.transportUrl) return ''
+  try {
+    return new URL(props.addon.transportUrl.replace('stremio://', 'https://')).hostname
+  } catch {
+    return ''
+  }
+})
 
 const configureUrl = computed(() => {
   if (!props.addon.transportUrl) return '#'
@@ -32,115 +44,104 @@ const copyUrl = async () => {
     alert('Failed to copy manifest URL. Please copy it manually.')
   }
 }
+
+watch(logo, () => {
+  logoFailed.value = false
+})
 </script>
 
 <template>
-  <div class="reorder-card group relative flex flex-row items-center gap-3 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-blue-400 dark:hover:border-blue-600 transition-all shadow-sm">
-    
-    <!-- Drag Handle (Desktop) -->
+  <div class="reorder-card group relative flex flex-row items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white/85 p-2.5 shadow-sm shadow-zinc-200/70 backdrop-blur-sm transition-all hover:border-blue-300 hover:shadow-md hover:shadow-blue-500/5 dark:border-white/5 dark:bg-zinc-900/70 dark:shadow-black/20 dark:hover:border-blue-500/40 sm:gap-3 sm:p-3">
     <div 
-      class="drag-handle touch-none sm:self-center p-1.5 rounded-lg transition-colors hidden sm:block"
+      class="drag-handle -ml-1 touch-none self-center rounded-xl p-1.5 transition-colors sm:ml-0"
       role="button"
       aria-label="Drag addon to reorder"
       :aria-disabled="isLocked"
-      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'"
+      :class="isLocked ? 'cursor-not-allowed text-zinc-200 dark:text-zinc-800' : 'cursor-grab text-zinc-300 hover:bg-blue-50 hover:text-blue-500 active:cursor-grabbing dark:text-zinc-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-300'"
     >
-      <GripVertical class="w-5 h-5" />
+      <GripVertical class="h-4 w-4 sm:h-5 sm:w-5" />
     </div>
 
-    <!-- Drag Handle (Mobile) -->
-    <div 
-      class="drag-handle touch-none self-center p-1.5 -ml-1 rounded-lg transition-colors sm:hidden"
-      role="button"
-      aria-label="Drag addon to reorder"
-      :aria-disabled="isLocked"
-      :class="isLocked ? 'text-zinc-200 dark:text-zinc-800 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing text-zinc-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'"
-    >
-      <GripVertical class="w-5 h-5" />
-    </div>
-
-    <!-- Logo (Smaller on mobile) -->
-    <div class="shrink-0 relative">
+    <div class="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-600 sm:h-12 sm:w-12">
+      <span>{{ displayInitial }}</span>
       <img 
+        v-if="!logoFailed"
         :src="logo" 
-        class="w-10 h-10 sm:w-14 sm:h-14 rounded-lg object-contain bg-zinc-50 dark:bg-zinc-800 p-1"
+        class="absolute inset-0 h-full w-full object-contain bg-white p-1.5 dark:bg-zinc-950"
         loading="lazy"
         alt=""
+        @error="logoFailed = true"
       />
     </div>
 
-    <!-- Info -->
-    <div class="flex-grow min-w-0 space-y-0.5 sm:space-y-1 overflow-hidden">
-      <div class="flex items-center gap-2 flex-wrap">
-        <h3 class="font-bold text-zinc-900 dark:text-zinc-100 truncate text-sm sm:text-lg">
+    <div class="min-w-0 flex-grow overflow-hidden">
+      <div class="flex min-w-0 items-center gap-2">
+        <h3 class="min-w-0 truncate text-sm font-semibold text-zinc-950 dark:text-zinc-100 sm:text-base">
           {{ manifest.name }}
         </h3>
-        <span v-if="manifest.version" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700">
+        <span v-if="manifest.version" class="shrink-0 rounded-full border border-zinc-200 bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-zinc-500 dark:border-white/10 dark:bg-zinc-800/80 dark:text-zinc-400">
           v{{ manifest.version }}
         </span>
       </div>
       
-      <!-- Description: Hide on mobile, show 1 line on desktop -->
-      <p class="hidden sm:block text-sm text-zinc-500 truncate">
+      <p class="hidden truncate text-sm text-zinc-500 dark:text-zinc-400 sm:block">
         {{ manifest.description }}
       </p>
 
-      <!-- Features Pills: Hide on mobile -->
-       <AddonFeatures :manifest="manifest" class="pt-1 hidden sm:flex" />
+      <div class="hidden items-center gap-2 sm:flex">
+        <span v-if="manifestDomain" class="truncate text-[11px] text-zinc-400 dark:text-zinc-500">
+          {{ manifestDomain }}
+        </span>
+        <AddonFeatures :manifest="manifest" class="hidden lg:flex" />
+      </div>
     </div>
 
-    <!-- Actions -->
-    <div class="flex items-center gap-1 self-center bg-zinc-50 dark:bg-zinc-800/50 p-1 rounded-lg border border-zinc-100 dark:border-zinc-800/50">
+    <div class="flex shrink-0 items-center gap-0.5 self-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1 dark:border-white/10 dark:bg-zinc-950/45">
       <a 
         v-if="manifest.behaviorHints?.configurable"
         :href="configureUrl" 
         target="_blank"
-        class="p-1.5 sm:p-2 text-zinc-400 hover:text-blue-600 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-all"
+        rel="noreferrer"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
         title="Configure Addon"
+        aria-label="Configure addon"
       >
-        <ExternalLink class="w-4 h-4" />
+        <ExternalLink class="h-4 w-4" />
       </a>
 
-      <!-- Hide Copy/Edit buttons on mobile to save space -->
       <button 
+        type="button"
         @click="copyUrl"
-        class="hidden sm:block p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-all"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         title="Copy Manifest URL"
+        aria-label="Copy manifest URL"
       >
-        <Copy class="w-4 h-4" />
+        <Copy class="h-4 w-4" />
       </button>
 
       <button 
+        type="button"
         @click="$emit('edit')"
-        class="hidden sm:block p-2 text-zinc-400 hover:text-blue-600 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-all"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
         title="Edit Manifest"
+        aria-label="Edit manifest"
       >
-        <Settings class="w-4 h-4" />
+        <Settings class="h-4 w-4" />
       </button>
-      
-      <!-- Mobile More Menu (Replacement for hidden buttons) - For now just show Edit since it's most important? 
-           Actually, let's just keep Configure, Edit, Delete on mobile. Copy is less useful on mobile. -->
-       <button 
-        @click="$emit('edit')"
-        class="sm:hidden p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-all"
-        title="Edit Manifest"
-      >
-        <Settings class="w-4 h-4" />
-      </button>
-
-      <div class="w-px h-3 sm:h-4 bg-zinc-200 dark:bg-zinc-700 mx-0.5 sm:mx-1"></div>
 
       <button 
         v-if="!isProtected" 
+        type="button"
         @click="$emit('remove')"
-        class="p-1.5 sm:p-2 text-zinc-400 hover:text-red-600 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition-all"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
         title="Remove Addon"
+        aria-label="Remove addon"
       >
-        <Trash2 class="w-4 h-4" />
+        <Trash2 class="h-4 w-4" />
       </button>
       
-      <div v-else class="p-1.5 sm:p-2 text-zinc-300 dark:text-zinc-600 cursor-not-allowed" title="Protected System Addon">
-        <ShieldCheck class="w-4 h-4" />
+      <div v-else class="cursor-not-allowed rounded-lg p-1.5 text-zinc-300 dark:text-zinc-600" title="Protected System Addon" aria-label="Protected system addon">
+        <ShieldCheck class="h-4 w-4" />
       </div>
     </div>
   </div>

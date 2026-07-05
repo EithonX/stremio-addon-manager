@@ -2,7 +2,7 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
-import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, AlertTriangle } from 'lucide-vue-next'
+import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, PackageOpen, X } from 'lucide-vue-next'
 import AddonItem from './AddonItem.vue'
 import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
@@ -71,6 +71,16 @@ const displayedAddons = computed(() => {
     addon.transportUrl.toLowerCase().includes(q)
   )
 })
+
+const totalAddonCount = computed(() => localAddons.value.length)
+const shownAddonCount = computed(() => displayedAddons.value.length)
+const dashboardSubtitle = computed(() => {
+  if (isSearching.value) {
+    return `${shownAddonCount.value} of ${totalAddonCount.value} shown`
+  }
+  return `${totalAddonCount.value} loaded`
+})
+const hasSearchNoResults = computed(() => isSearching.value && totalAddonCount.value > 0 && shownAddonCount.value === 0)
 
 const dragTouchDelay = 180
 const dragTouchThreshold = 8
@@ -221,101 +231,224 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="container mx-auto px-4 py-8 max-w-5xl">
-    <!-- Sticky only on medium screens and up to prevent overcrowding on mobile -->
+  <div class="container relative isolate mx-auto max-w-5xl px-4 py-3">
     <div
-      class="card-base p-4 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center md:sticky top-20 z-30 shadow-xl shadow-zinc-200/50 dark:shadow-black/50 ring-1 ring-zinc-900/5 dark:ring-white/10 bg-white dark:bg-zinc-900 md:bg-white/80 md:dark:bg-zinc-900/80 md:backdrop-blur-md transition-all duration-200 ease-out"
-      :class="isDragging ? 'opacity-0 pointer-events-none -translate-y-4 scale-[0.985]' : 'opacity-100 translate-y-0 scale-100'"
+      class="mb-3 rounded-2xl border border-zinc-200 bg-white/75 p-3 shadow-sm shadow-zinc-200/60 backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/5 dark:bg-zinc-900/70 dark:shadow-black/30 lg:sticky lg:top-20 lg:z-30"
+      :class="[
+        isDragging ? 'opacity-0 pointer-events-none -translate-y-4 scale-[0.985]' : 'opacity-100 translate-y-0 scale-100',
+        hasUnsyncedChanges ? 'ring-1 ring-amber-400/20 dark:ring-amber-300/15' : ''
+      ]"
     >
-      
-      <!-- Search Bar (Full width on mobile) -->
-      <div class="w-full md:w-auto md:flex-1 md:max-w-md relative">
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-        <input 
-          v-model="searchQuery" 
-          placeholder="Search addons..." 
-          class="input-field pl-10 h-9 md:h-10 text-sm w-full"
-        />
-      </div>
+      <div class="flex flex-col gap-3 lg:hidden">
+        <div class="flex min-h-10 items-center justify-between gap-3">
+          <div class="min-w-0">
+            <h1 class="truncate text-lg font-bold leading-5 tracking-tight text-zinc-950 dark:text-white">
+              Your addons
+            </h1>
+            <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
+              <p class="truncate text-xs leading-4 text-zinc-500 dark:text-zinc-400">
+                {{ dashboardSubtitle }}
+              </p>
+              <span
+                v-if="hasUnsyncedChanges"
+                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-amber-700 dark:text-amber-200"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                Unsynced
+              </span>
+            </div>
+          </div>
 
-      <!-- Actions Row -->
-      <div class="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end overflow-x-auto no-scrollbar">
-        
-        <!-- Add Button -->
-        <button 
-          @click="openAddModal" 
-          class="btn-primary h-9 md:h-10 px-3 md:px-4 text-sm whitespace-nowrap bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 dark:hover:bg-zinc-600 shadow-md flex-shrink-0" 
-          title="Add New Addon"
-        >
-          <Plus class="w-4 h-4" />
-          <span class="hidden sm:inline">Add Addon</span>
-          <span class="sm:hidden">Add</span>
-        </button>
-
-        <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0"></div>
-
-        <div class="flex items-center gap-1 flex-shrink-0">
-           <button 
-             @click="isLocked = !isLocked" 
-             class="p-1.5 md:p-2 rounded-lg transition-colors border flex-shrink-0"
-             :class="isLocked ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'text-zinc-500 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'"
-             :title="isLocked ? 'Unlock Reordering' : 'Lock Reordering'"
-           >
-            <Lock v-if="isLocked" class="w-5 h-5" />
-            <Unlock v-else class="w-5 h-5" />
-          </button>
-
-           <button @click="backupConfig" class="p-1.5 md:p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Backup Configuration">
-            <Download class="w-5 h-5" />
-          </button>
-          <button @click="restoreConfig" class="p-1.5 md:p-2 text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0" title="Restore Configuration">
-            <Upload class="w-5 h-5" />
+          <button
+            type="button"
+            @click="$emit('sync')"
+            class="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-all"
+            :class="hasUnsyncedChanges ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-[0.98]' : 'cursor-default border border-zinc-200 bg-white/70 text-zinc-500 shadow-sm dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-400'"
+            :disabled="isSyncDisabled"
+          >
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
+            <span>{{ hasUnsyncedChanges ? 'Sync' : 'Synced' }}</span>
           </button>
         </div>
-        
-        <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0"></div>
 
-        <button 
-          @click="$emit('sync')" 
-          class="btn-primary h-9 md:h-10 flex-shrink-0"
-          :class="hasUnsyncedChanges ? 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20' : 'bg-zinc-200 hover:bg-zinc-200 text-zinc-500 shadow-none dark:bg-zinc-800 dark:hover:bg-zinc-800 dark:text-zinc-400'"
-          :disabled="isSyncDisabled"
-        >
-          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
-          <span class="hidden sm:inline">{{ hasUnsyncedChanges ? 'Sync changes' : 'Synced' }}</span>
-          <span class="sm:hidden">{{ hasUnsyncedChanges ? 'Sync' : 'Synced' }}</span>
+        <div class="relative w-full">
+          <Search class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <input
+            v-model="searchQuery"
+            placeholder="Search addons..."
+            class="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-8 pr-8 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+          />
+          <button
+            v-if="isSearching"
+            type="button"
+            class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            aria-label="Clear search"
+            @click="searchQuery = ''"
+          >
+            <X class="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            @click="openAddModal"
+            class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+            title="Add New Addon"
+          >
+            <Plus class="h-4 w-4" />
+            <span>Add</span>
+          </button>
+
+          <div class="flex h-10 shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
+            <button
+              type="button"
+              @click="isLocked = !isLocked"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg transition"
+              :class="isLocked ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'text-zinc-500 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+              :title="isLocked ? 'Unlock Reordering' : 'Lock Reordering'"
+              :aria-label="isLocked ? 'Unlock reordering' : 'Lock reordering'"
+            >
+              <Lock v-if="isLocked" class="h-4 w-4" />
+              <Unlock v-else class="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              @click="backupConfig"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
+              title="Backup Configuration"
+              aria-label="Backup configuration"
+            >
+              <Download class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              @click="restoreConfig"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
+              title="Restore Configuration"
+              aria-label="Restore configuration"
+            >
+              <Upload class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden min-h-12 items-center gap-2.5 lg:flex">
+        <div class="w-40 shrink-0 min-w-0 lg:w-44">
+          <h1 class="truncate text-lg font-bold leading-5 tracking-tight text-zinc-950 dark:text-white">
+            Your addons
+          </h1>
+          <div class="mt-1 flex min-w-0 items-center gap-1.5">
+            <p class="truncate text-xs leading-4 text-zinc-500 dark:text-zinc-400">
+              {{ dashboardSubtitle }}
+            </p>
+            <span
+              v-if="hasUnsyncedChanges"
+              class="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-amber-700 dark:text-amber-200"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+              Unsynced
+            </span>
+          </div>
+        </div>
+
+        <div class="relative min-w-0 flex-1">
+          <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <input
+            v-model="searchQuery"
+            placeholder="Search addons..."
+            class="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-9 pr-9 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+          />
+          <button
+            v-if="isSearching"
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            aria-label="Clear search"
+            @click="searchQuery = ''"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+
+        <div class="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            @click="openAddModal"
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 lg:px-4"
+            title="Add New Addon"
+          >
+            <Plus class="h-4 w-4" />
+            <span>Add Addon</span>
+          </button>
+
+          <div class="flex h-10 items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
+            <button
+              type="button"
+              @click="isLocked = !isLocked"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg transition"
+              :class="isLocked ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'text-zinc-500 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+              :title="isLocked ? 'Unlock Reordering' : 'Lock Reordering'"
+              :aria-label="isLocked ? 'Unlock reordering' : 'Lock reordering'"
+            >
+              <Lock v-if="isLocked" class="h-4 w-4" />
+              <Unlock v-else class="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              @click="backupConfig"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
+              title="Backup Configuration"
+              aria-label="Backup configuration"
+            >
+              <Download class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              @click="restoreConfig"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
+              title="Restore Configuration"
+              aria-label="Restore configuration"
+            >
+              <Upload class="h-4 w-4" />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            @click="$emit('sync')"
+            class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition-all lg:px-4"
+            :class="hasUnsyncedChanges ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-[0.98]' : 'cursor-default border border-zinc-200 bg-white/70 text-zinc-500 shadow-sm dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-400'"
+            :disabled="isSyncDisabled"
+          >
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
+            <span>{{ hasUnsyncedChanges ? 'Sync changes' : 'Synced' }}</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <div v-if="localAddons.length === 0" class="animate-fade-in-up rounded-3xl border border-zinc-200 bg-white/75 px-6 py-8 text-center shadow-sm dark:border-white/5 dark:bg-zinc-900/60">
+      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-500">
+        <PackageOpen class="h-6 w-6" />
+      </div>
+      <h3 class="mb-2 text-lg font-semibold text-zinc-950 dark:text-white">No addons loaded</h3>
+      <p class="mx-auto mb-5 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+        Your list is empty. Reload to import your current profile from Stremio, or add addons manually.
+      </p>
+      <div class="flex flex-col justify-center gap-2 sm:flex-row">
+        <button type="button" @click="$emit('reload')" class="btn-primary h-10 rounded-xl px-4 text-sm" :disabled="isLoading">
+          <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" /> Reload from Stremio
+        </button>
+        <button type="button" @click="openAddModal" class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
+          <Plus class="h-4 w-4" /> Add addon
         </button>
       </div>
     </div>
 
-    <div
-      v-if="hasUnsyncedChanges"
-      class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
-    >
-      <AlertTriangle class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-300" />
-      <div class="min-w-0">
-        <p class="text-sm font-bold">Unsynced changes</p>
-        <p class="text-sm text-amber-800 dark:text-amber-200">
-          Your local addon list has changes that are not saved to Stremio yet.
-        </p>
-      </div>
-    </div>
-
-    <!-- Stats / Empty State -->
-    <div v-if="localAddons.length === 0" class="text-center py-20 animate-fade-in-up">
-      <div class="bg-zinc-50 dark:bg-zinc-800/50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 border border-zinc-100 dark:border-zinc-700">
-        <Upload class="w-10 h-10 text-zinc-400" />
-      </div>
-      <h3 class="text-xl font-bold text-zinc-900 dark:text-white mb-2">No addons loaded</h3>
-      <p class="text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto mb-8">
-        Your list is empty. Reload to import your current profile from Stremio, or add addons manually.
-      </p>
-      <button @click="$emit('reload')" class="btn-primary mx-auto" :disabled="isLoading">
-        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" /> Reload from Stremio
-      </button>
-    </div>
-
-    <!-- Addon List -->
     <template v-else>
       <Draggable 
         v-if="canDrag"
@@ -328,7 +461,7 @@ onUnmounted(() => {
         chosen-class="sortable-chosen"
         drag-class="sortable-drag"
         fallback-class="sortable-fallback"
-        class="reorder-list flex flex-col gap-4 pb-20"
+        class="reorder-list flex flex-col gap-3 pb-20"
         :animation="220"
         easing="cubic-bezier(0.22, 1, 0.36, 1)"
         :swap-threshold="0.68"
@@ -355,8 +488,7 @@ onUnmounted(() => {
         </template>
       </Draggable>
 
-      <!-- Read-only List when searching or locked -->
-      <div v-else class="flex flex-col gap-4 pb-20">
+      <div v-else class="flex flex-col gap-3 pb-20">
          <AddonItem 
             v-for="(element, index) in displayedAddons"
             :key="element.transportUrl"
@@ -365,8 +497,21 @@ onUnmounted(() => {
             @remove="handleRemove(index)"
             @edit="handleEdit(index)"
           />
-          <div v-if="displayedAddons.length === 0" class="text-center py-10 text-zinc-500">
-            No addons found.
+          <div v-if="hasSearchNoResults" class="rounded-3xl border border-zinc-200 bg-white/75 px-6 py-8 text-center shadow-sm dark:border-white/5 dark:bg-zinc-900/60">
+            <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
+              <Search class="h-4 w-4" />
+            </div>
+            <h3 class="text-base font-semibold text-zinc-950 dark:text-white">No addons found</h3>
+            <p class="mx-auto mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+              Try a different name, description, or manifest URL.
+            </p>
+            <button
+              type="button"
+              class="mt-5 inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              @click="searchQuery = ''"
+            >
+              Clear search
+            </button>
           </div>
       </div>
     </template>

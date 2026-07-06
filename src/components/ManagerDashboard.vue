@@ -40,6 +40,7 @@ const isAddModalOpen = ref(false)
 const newAddonUrl = ref('')
 const isAddingAddon = ref(false)
 const addAddonError = ref('')
+const backupRestoreError = ref('')
 const isLocked = ref(false)
 const isDragging = ref(false)
 const localAddons = ref([])
@@ -229,6 +230,7 @@ const installAddon = async () => {
 }
 
 const backupConfig = () => {
+  backupRestoreError.value = ''
   const data = JSON.stringify({ addons: localAddons.value }, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -240,6 +242,7 @@ const backupConfig = () => {
 }
 
 const restoreConfig = () => {
+  backupRestoreError.value = ''
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'application/json'
@@ -253,17 +256,23 @@ const restoreConfig = () => {
         confirmModal.value = {
           show: true,
           title: 'Restore Backup?',
-          message: `Replace current list with ${restoredAddons.length} addons from backup? This will overwrite your current list.`,
+          message: `This replaces your local addon list with ${restoredAddons.length} addons from the backup. You still need to sync changes to save it to Stremio.`,
           confirmText: 'Restore',
           type: 'info',
           action: () => {
             emit('update:addons', restoredAddons)
             confirmModal.value.show = false
+            backupRestoreError.value = ''
           }
         }
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Failed to parse backup file.')
+        backupRestoreError.value = err instanceof Error
+          ? `Couldn't restore that file: ${err.message}`
+          : "Couldn't restore that file. Make sure it's a valid addon backup."
       }
+    }
+    reader.onerror = () => {
+      backupRestoreError.value = "Couldn't read that file. Please try again."
     }
     reader.readAsText(file)
   }
@@ -485,6 +494,22 @@ onUnmounted(() => {
         </div>
       </div>
 
+    </div>
+
+    <div
+      v-if="backupRestoreError"
+      class="mb-3 flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+    >
+      <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+      <p class="min-w-0 flex-1 font-medium leading-5">{{ backupRestoreError }}</p>
+      <button
+        type="button"
+        @click="backupRestoreError = ''"
+        class="-mr-1 -mt-0.5 shrink-0 rounded-lg p-1 text-rose-500 transition hover:bg-rose-100 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
+        aria-label="Dismiss error"
+      >
+        <X class="h-4 w-4" />
+      </button>
     </div>
 
     <div v-if="localAddons.length === 0" class="animate-fade-in-up rounded-3xl border border-zinc-200 bg-white/75 px-6 py-8 text-center shadow-sm dark:border-white/5 dark:bg-zinc-900/60">

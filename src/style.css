@@ -117,16 +117,3 @@
   }
 }
 
-/* Globally hide scrollbars on touch devices */
-@media (pointer: coarse) {
-  ::-webkit-scrollbar {
-    display: none;
-  }
-
-  * {
-    -ms-overflow-style: none;
-    /* IE and Edge */
-    scrollbar-width: none;
-    /* Firefox */
-  }
-}

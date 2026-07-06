@@ -923,17 +923,6 @@ async function executeReset() {
   }
 }
 
-/* Hide scrollbars on touch devices or when explicitly requested */
-@media (pointer: coarse) {
-  ::-webkit-scrollbar {
-    display: none;
-  }
-  * {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
-  }
-}
-
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

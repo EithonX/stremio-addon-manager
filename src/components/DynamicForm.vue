@@ -2,8 +2,7 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
-import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown } from 'lucide-vue-next'
-import AddonFeatures from './AddonFeatures.vue'
+import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown, X, Layers } from 'lucide-vue-next'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { createEdgeDragScroll } from '../utils/edgeDragScroll'
 import ManifestJsonEditor from './editor/ManifestJsonEditor.vue'
@@ -531,17 +530,42 @@ async function executeReset() {
 
 <template>
   <div class="flex flex-col">
-    <div class="px-4 md:px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
-      <h3 class="text-xl font-semibold text-zinc-900 dark:text-white truncate pr-4">
-        Edit {{ formModel.name || 'Addon' }}
-      </h3>
-      <div class="flex gap-2">
-        <button 
-          @click="toggleEditMode"
-          class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+    <div class="sticky top-0 z-30 flex items-center justify-between gap-3 rounded-t-2xl border-b border-zinc-200/80 dark:border-white/5 bg-white/90 dark:bg-zinc-900/85 backdrop-blur-md px-4 md:px-6 py-3.5">
+      <div class="min-w-0">
+        <h3 class="truncate text-base md:text-lg font-semibold leading-tight text-zinc-900 dark:text-white">
+          {{ formModel.name || 'Untitled Addon' }}
+        </h3>
+        <p class="text-xs text-zinc-500 dark:text-zinc-500">Edit manifest</p>
+      </div>
+
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- Segmented Form / JSON toggle -->
+        <div class="flex items-center rounded-lg border border-zinc-200 bg-zinc-100/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
+          <button
+            @click="isAdvancedMode && toggleEditMode()"
+            class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
+            :class="!isAdvancedMode ? 'bg-white text-blue-600 shadow-sm dark:bg-zinc-800 dark:text-blue-300' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'"
+          >
+            <Edit3 class="h-3.5 w-3.5" />
+            Form
+          </button>
+          <button
+            @click="!isAdvancedMode && toggleEditMode()"
+            class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
+            :class="isAdvancedMode ? 'bg-white text-blue-600 shadow-sm dark:bg-zinc-800 dark:text-blue-300' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'"
+          >
+            <Code class="h-3.5 w-3.5" />
+            JSON
+          </button>
+        </div>
+
+        <button
+          @click="$emit('cancel')"
+          class="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+          title="Close"
+          aria-label="Close editor"
         >
-          <component :is="isAdvancedMode ? Edit3 : Code" class="w-4 h-4" />
-          {{ isAdvancedMode ? 'Form Mode' : 'JSON Mode' }}
+          <X class="h-5 w-5" />
         </button>
       </div>
     </div>
@@ -552,118 +576,140 @@ async function executeReset() {
          Ideally, the modal body (parent) scrolls, and this form just expands. 
          But we set h-[80vh] on line 189. 
          Let's remove fixed height and let it flow. -->
-    <div class="space-y-6 px-4 md:px-6 pt-4 pb-6">
+    <div class="space-y-5 px-4 md:px-6 pt-5 pb-6">
       <template v-if="!isAdvancedMode">
-        <!-- Basic Info -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Name</label>
-            <input v-model="formModel.name" class="input-field" placeholder="Addon Name" />
+        <!-- Details -->
+        <section class="rounded-2xl border border-zinc-200 bg-white/70 p-4 md:p-5 backdrop-blur-sm dark:border-white/5 dark:bg-zinc-900/40">
+          <h4 class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Details</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Name</label>
+              <input v-model="formModel.name" class="input-field" placeholder="Addon Name" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Description</label>
+              <input v-model="formModel.description" class="input-field" placeholder="Description" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Logo URL</label>
+              <input v-model="formModel.logo" class="input-field" placeholder="https://..." />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Background URL</label>
+              <input v-model="formModel.background" class="input-field" placeholder="https://..." />
+            </div>
           </div>
-           <div class="space-y-2">
-            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Description</label>
-             <input v-model="formModel.description" class="input-field" placeholder="Description" />
+        </section>
+
+        <!-- Capabilities & Optimization -->
+        <section class="rounded-2xl border border-zinc-200 bg-white/70 p-4 md:p-5 backdrop-blur-sm dark:border-white/5 dark:bg-zinc-900/40">
+          <div class="mb-2.5">
+            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Capabilities</h4>
           </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Logo URL</label>
-             <input v-model="formModel.logo" class="input-field" placeholder="https://..." />
+
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <!-- Search Toggle -->
+            <div
+              class="flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors"
+              :class="hasCapability('search') ? 'border-blue-500/30 bg-blue-50/40 dark:border-blue-500/30 dark:bg-blue-500/5' : 'border-zinc-200 bg-zinc-50/50 dark:border-white/5 dark:bg-zinc-950/30'"
+            >
+              <div
+                class="grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors"
+                :class="hasCapability('search') ? 'bg-blue-500/10 text-blue-500 dark:text-blue-400' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800/60 dark:text-zinc-500'"
+              >
+                <Search class="h-3.5 w-3.5" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Search Support</p>
+                <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{{ hasCapability('search') ? 'Included' : 'Optimized out' }}</p>
+              </div>
+              <button
+                @click="toggleOptimization('search')"
+                class="relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                :class="hasCapability('search') ? 'bg-blue-600' : 'bg-zinc-300 dark:bg-zinc-700'"
+                role="switch"
+                :aria-checked="hasCapability('search')"
+              >
+                <div
+                  class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="hasCapability('search') ? 'translate-x-4' : 'translate-x-0'"
+                ></div>
+              </button>
+            </div>
+
+            <!-- Catalogs Toggle -->
+            <div
+              class="flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors"
+              :class="hasCapability('catalogs') ? 'border-emerald-500/30 bg-emerald-50/40 dark:border-emerald-500/30 dark:bg-emerald-500/5' : 'border-zinc-200 bg-zinc-50/50 dark:border-white/5 dark:bg-zinc-950/30'"
+            >
+              <div
+                class="grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors"
+                :class="hasCapability('catalogs') ? 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800/60 dark:text-zinc-500'"
+              >
+                <Grid class="h-3.5 w-3.5" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Home Catalogs</p>
+                <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{{ hasCapability('catalogs') ? 'Visible on Home' : 'Search only' }}</p>
+              </div>
+              <button
+                @click="toggleOptimization('catalogs')"
+                class="relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                :class="hasCapability('catalogs') ? 'bg-emerald-600' : 'bg-zinc-300 dark:bg-zinc-700'"
+                role="switch"
+                :aria-checked="hasCapability('catalogs')"
+              >
+                <div
+                  class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="hasCapability('catalogs') ? 'translate-x-4' : 'translate-x-0'"
+                ></div>
+              </button>
+            </div>
+
+            <!-- Metadata Toggle -->
+            <div
+              class="flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors"
+              :class="hasCapability('meta') ? 'border-purple-500/30 bg-purple-50/40 dark:border-purple-500/30 dark:bg-purple-500/5' : 'border-zinc-200 bg-zinc-50/50 dark:border-white/5 dark:bg-zinc-950/30'"
+            >
+              <div
+                class="grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors"
+                :class="hasCapability('meta') ? 'bg-purple-500/10 text-purple-500 dark:text-purple-400' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800/60 dark:text-zinc-500'"
+              >
+                <FileText class="h-3.5 w-3.5" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Metadata</p>
+                <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{{ hasCapability('meta') ? 'Detailed info' : 'Basic info' }}</p>
+              </div>
+              <button
+                @click="toggleOptimization('meta')"
+                class="relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                :class="hasCapability('meta') ? 'bg-purple-600' : 'bg-zinc-300 dark:bg-zinc-700'"
+                role="switch"
+                :aria-checked="hasCapability('meta')"
+              >
+                <div
+                  class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="hasCapability('meta') ? 'translate-x-4' : 'translate-x-0'"
+                ></div>
+              </button>
+            </div>
           </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Background URL</label>
-             <input v-model="formModel.background" class="input-field" placeholder="https://..." />
-          </div>
-        </div>
-
-        <div class="pt-2">
-          <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 block">Capabilities</label>
-          <AddonFeatures :manifest="formModel" />
-        </div>
-
-        <div class="pt-4">
-           <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3 block">Optimization</label>
-           <div class="flex flex-col gap-3">
-             <!-- Search Toggle -->
-             <div class="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
-                <div class="flex items-center gap-3">
-                   <div class="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
-                      <Search class="w-4 h-4" />
-                   </div>
-                   <div class="flex flex-col">
-                      <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Search Support</span>
-                      <span class="text-xs text-zinc-500">{{ hasCapability('search') ? 'Included in manifest' : 'Optimized out' }}</span>
-                   </div>
-                </div>
-                <!-- Switch -->
-                <button 
-                  @click="toggleOptimization('search')"
-                  class="w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                  :class="hasCapability('search') ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-zinc-700'"
-                >
-                  <div 
-                    class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm"
-                    :class="hasCapability('search') ? 'translate-x-5' : 'translate-x-0'"
-                  ></div>
-                </button>
-             </div>
-
-             <!-- Catalogs Toggle -->
-             <div class="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
-                <div class="flex items-center gap-3">
-                   <div class="p-2 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
-                      <Grid class="w-4 h-4" />
-                   </div>
-                   <div class="flex flex-col">
-                      <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Home Catalogs</span>
-                      <span class="text-xs text-zinc-500">{{ hasCapability('catalogs') ? 'Visible on Home' : 'Search only' }}</span>
-                   </div>
-                </div>
-                <button 
-                  @click="toggleOptimization('catalogs')"
-                  class="w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  :class="hasCapability('catalogs') ? 'bg-emerald-600' : 'bg-zinc-200 dark:bg-zinc-700'"
-                >
-                  <div 
-                    class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm"
-                    :class="hasCapability('catalogs') ? 'translate-x-5' : 'translate-x-0'"
-                  ></div>
-                </button>
-             </div>
-
-             <!-- Metadata Toggle -->
-             <div class="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
-                <div class="flex items-center gap-3">
-                   <div class="p-2 rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
-                      <FileText class="w-4 h-4" />
-                   </div>
-                   <div class="flex flex-col">
-                      <span class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Metadata</span>
-                      <span class="text-xs text-zinc-500">{{ hasCapability('meta') ? 'Detailed info' : 'Basic info' }}</span>
-                   </div>
-                </div>
-                <button 
-                  @click="toggleOptimization('meta')"
-                  class="w-11 h-6 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  :class="hasCapability('meta') ? 'bg-purple-600' : 'bg-zinc-200 dark:bg-zinc-700'"
-                >
-                  <div 
-                    class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm"
-                    :class="hasCapability('meta') ? 'translate-x-5' : 'translate-x-0'"
-                  ></div>
-                </button>
-             </div>
-           </div>
-        </div>
-
-        <hr class="border-zinc-100 dark:border-zinc-800" />
+        </section>
 
         <!-- Catalogs Editor -->
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <h4 class="text-lg font-medium text-zinc-900 dark:text-zinc-100">Catalogs</h4>
-            <span class="text-xs text-zinc-500">Drag to reorder</span>
+        <section class="space-y-3">
+          <div class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-2">
+              <h4 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Catalogs</h4>
+              <span class="rounded-full border border-zinc-200 bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-zinc-500 dark:border-white/10 dark:bg-zinc-800/80 dark:text-zinc-400">
+                {{ formModel.catalogs.length }}
+              </span>
+            </div>
+            <span class="text-xs text-zinc-400 dark:text-zinc-500">Drag to reorder</span>
           </div>
 
-          <Draggable 
+          <Draggable
             v-model="formModel.catalogs"
             item-key="__dragKey"
             handle=".drag-handle"
@@ -692,76 +738,78 @@ async function executeReset() {
             @unchoose="catalogEdgeDragScroll.stop(); isCatalogDragging = false"
           >
             <template #item="{ element, index }">
-              <div class="reorder-card group bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 flex items-center gap-2 md:gap-3 transition-all hover:border-blue-400 dark:hover:border-blue-600">
+              <div class="reorder-card group flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white/85 px-2 py-1.5 shadow-sm shadow-zinc-200/50 backdrop-blur-sm transition-all hover:border-blue-300 dark:border-white/5 dark:bg-zinc-900/60 dark:shadow-black/20 dark:hover:border-blue-500/40 sm:gap-2 sm:px-2.5">
                 <!-- Drag Handle -->
-                <div class="drag-handle touch-none p-2 cursor-grab active:cursor-grabbing rounded-lg text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" role="button" aria-label="Drag catalog to reorder">
-                  <Move class="w-4 h-4" />
+                <div class="drag-handle shrink-0 touch-none cursor-grab rounded-lg p-1 text-zinc-300 transition-colors hover:bg-blue-50 hover:text-blue-500 active:cursor-grabbing dark:text-zinc-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-300" role="button" aria-label="Drag catalog to reorder">
+                  <Move class="h-4 w-4" />
                 </div>
-                
+
                 <!-- Visibility Toggle -->
-                <button 
+                <button
                   v-if="!hasSystemExtra(element)"
                   @click="toggleCatalogVisibility(element)"
-                  class="p-2 rounded-lg transition-colors"
-                  :class="isCatalogVisible(element) ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-zinc-400 hover:text-zinc-600 bg-zinc-100 dark:bg-zinc-800'"
+                  class="shrink-0 rounded-lg p-1.5 transition-colors"
+                  :class="isCatalogVisible(element) ? 'bg-blue-500/10 text-blue-500 ring-1 ring-inset ring-blue-500/20 dark:text-blue-300' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300'"
                   :title="isCatalogVisible(element) ? 'Visible' : 'Hidden'"
                 >
-                  <component :is="hasSearchExtra(element) ? Compass : Home" class="w-4 h-4" />
+                  <component :is="hasSearchExtra(element) ? Compass : Home" class="h-4 w-4" />
                 </button>
-                <div v-else class="w-8 h-8 flex items-center justify-center">
-                    <!-- Placeholder spacing -->
+                <div v-else class="h-7 w-7 shrink-0">
+                  <!-- Placeholder spacing -->
                 </div>
 
-                <!-- Type Badge -->
-                <span class="px-1.5 md:px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[10px] md:text-xs font-mono text-zinc-500 font-medium w-auto text-center shrink-0">
-                  {{ element.type }}
-                </span>
-
                 <!-- Name Input -->
-                <input 
-                  v-model="element.name" 
-                  class="flex-1 min-w-0 bg-transparent border-none outline-none text-sm font-medium placeholder-zinc-400 text-zinc-900 dark:text-zinc-100 focus:ring-0"
+                <input
+                  v-model="element.name"
+                  class="min-w-0 flex-1 truncate rounded-md border-none bg-transparent px-1.5 py-1 text-sm font-medium text-zinc-900 placeholder-zinc-400 outline-none transition-colors focus:bg-zinc-100 focus:ring-0 dark:text-zinc-100 dark:focus:bg-zinc-800/60"
                   placeholder="Catalog Name"
                 />
 
-                <!-- Delete -->
-                <button 
+                <!-- Type Chip -->
+                <span class="shrink-0 rounded-md bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium lowercase leading-none text-zinc-500 dark:bg-zinc-800/70 dark:text-zinc-400">
+                  {{ element.type }}
+                </span>
+
+                <!-- Delete (separate) -->
+                <button
                   v-if="!hasSystemExtra(element) && !hasSearchExtra(element)"
                   @click="deleteCatalog(index)"
-                  class="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
+                  class="ml-1 shrink-0 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
                   title="Delete Catalog"
                 >
-                  <Trash2 class="w-4 h-4" />
+                  <Trash2 class="h-4 w-4" />
                 </button>
 
-                <div class="flex flex-col gap-0.5 shrink-0">
+                <!-- Move up/down group -->
+                <div class="flex shrink-0 flex-col rounded-md border border-zinc-200 bg-zinc-50/80 dark:border-white/10 dark:bg-zinc-950/30">
                   <button
                     type="button"
                     @click="moveCatalog(index, -1)"
                     :disabled="index === 0"
-                    class="p-1 rounded-md text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-zinc-400 transition-colors"
+                    class="rounded-t-md px-1 py-0.5 text-zinc-400 transition-colors hover:text-blue-600 disabled:opacity-25 disabled:hover:text-zinc-400 dark:hover:text-blue-300"
                     title="Move catalog up"
                   >
-                    <ChevronUp class="w-3.5 h-3.5" />
+                    <ChevronUp class="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
                     @click="moveCatalog(index, 1)"
                     :disabled="index === formModel.catalogs.length - 1"
-                    class="p-1 rounded-md text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-zinc-400 transition-colors"
+                    class="rounded-b-md px-1 py-0.5 text-zinc-400 transition-colors hover:text-blue-600 disabled:opacity-25 disabled:hover:text-zinc-400 dark:hover:text-blue-300"
                     title="Move catalog down"
                   >
-                    <ChevronDown class="w-3.5 h-3.5" />
+                    <ChevronDown class="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
             </template>
           </Draggable>
           
-          <div v-if="formModel.catalogs.length === 0" class="text-center py-8 text-zinc-500 italic bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700">
-            No catalogs found in this addon.
+          <div v-if="formModel.catalogs.length === 0" class="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 py-7 text-center dark:border-white/10 dark:bg-zinc-900/30">
+            <Layers class="h-5 w-5 text-zinc-300 dark:text-zinc-600" />
+            <p class="text-xs text-zinc-500 dark:text-zinc-400">No catalogs found in this addon.</p>
           </div>
-        </div>
+        </section>
       </template>
 
       <!-- Advanced JSON Editor -->
@@ -769,31 +817,33 @@ async function executeReset() {
     </div>
 
     <!-- Footer Actions (Station) -->
-    <div class="sticky bottom-0 px-4 md:px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col-reverse md:flex-row justify-between items-center gap-4 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.2)]">
-      
-      <button 
+    <div class="sticky bottom-0 z-20 flex flex-col-reverse items-center justify-between gap-3 rounded-b-2xl border-t border-zinc-200/80 bg-white/90 px-4 py-3.5 backdrop-blur-md dark:border-white/5 dark:bg-zinc-900/85 md:flex-row md:px-6">
+
+      <button
         @click="handleReset"
-        class="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-zinc-500 hover:text-red-600 transition-colors border border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg"
+        class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800 md:w-auto"
         :disabled="isResetting"
       >
-        <RotateCcw class="w-4 h-4" :class="{ 'animate-spin': isResetting }" />
+        <RotateCcw class="h-4 w-4" :class="{ 'animate-spin': isResetting }" />
         {{ isResetting ? 'Resetting...' : 'Reset to Default' }}
       </button>
 
-      <div class="flex gap-3 w-full md:w-auto">
-        <button 
+      <div class="flex w-full gap-2.5 md:w-auto">
+        <button
           @click="$emit('cancel')"
-          class="flex-1 md:flex-none px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg"
+          class="flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800 md:flex-none"
         >
           Cancel
         </button>
-        <button 
+        <button
           @click="handleSubmit"
           :disabled="!hasUnsavedChanges"
-          class="flex-1 md:flex-none btn-primary justify-center"
-          :class="{ 'opacity-50 cursor-not-allowed': !hasUnsavedChanges }"
+          class="flex flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-all active:scale-95 md:flex-none"
+          :class="hasUnsavedChanges
+            ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20 hover:bg-blue-700'
+            : 'cursor-not-allowed border border-zinc-200 bg-zinc-100 text-zinc-400 dark:border-white/5 dark:bg-zinc-800/50 dark:text-zinc-600'"
         >
-          <Save class="w-4 h-4" />
+          <Save class="h-4 w-4" />
           Save Changes
         </button>
       </div>

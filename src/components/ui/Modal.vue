@@ -18,6 +18,10 @@ const props = defineProps({
   noPadding: {
     type: Boolean,
     default: false
+  },
+  noHeader: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -93,7 +97,7 @@ onUnmounted(() => {
         ]"
       >
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-zinc-800">
+        <div v-if="!noHeader" class="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-zinc-800">
           <h3 class="text-lg font-semibold text-zinc-900 dark:text-white" v-if="title">
             {{ title }}
           </h3>

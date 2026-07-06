@@ -549,10 +549,10 @@ onUnmounted(() => {
 
     <!-- Detailed Edit Modal -->
     <Modal 
-      :show="isEditModalOpen" 
-      @close="isEditModalOpen = false" 
+      :show="isEditModalOpen"
+      @close="isEditModalOpen = false"
       max-width="max-w-4xl"
-      title="Edit Addon"
+      no-header
       no-padding
       v-slot="{ scrollContainer }"
     >

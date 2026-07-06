@@ -94,8 +94,8 @@ function tokenizeJsonLine(line) {
 </script>
 
 <template>
-  <div class="flex-1 flex relative font-mono text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden group focus-within:ring-2 focus-within:ring-blue-500 min-h-[500px]">
-    <div class="bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 text-right select-none px-2 py-4 border-r border-zinc-200 dark:border-zinc-700 min-w-[3rem]" aria-hidden="true">
+  <div class="flex-1 flex relative font-mono text-sm bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-white/10 rounded-2xl overflow-hidden group focus-within:ring-2 focus-within:ring-blue-500 min-h-[500px]">
+    <div class="bg-zinc-100 dark:bg-zinc-900/60 text-zinc-400 dark:text-zinc-600 text-right select-none px-2 py-4 border-r border-zinc-200 dark:border-white/10 min-w-[3rem]" aria-hidden="true">
       <div v-for="n in lineCount" :key="n">{{ n }}</div>
     </div>
 

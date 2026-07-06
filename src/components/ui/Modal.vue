@@ -5,6 +5,8 @@
 // Nested/overlapping modals stay locked until the last one releases its lock.
 let modalBodyLockCount = 0
 let previousBodyOverflow = ''
+let modalStack = []
+let nextModalId = 1
 
 function lockBodyScroll() {
   if (typeof document === 'undefined') return
@@ -23,6 +25,20 @@ function unlockBodyScroll() {
     document.body.style.overflow = previousBodyOverflow
     previousBodyOverflow = ''
   }
+}
+
+function registerModal(id) {
+  if (!modalStack.includes(id)) {
+    modalStack.push(id)
+  }
+}
+
+function unregisterModal(id) {
+  modalStack = modalStack.filter((modalId) => modalId !== id)
+}
+
+function isTopModal(id) {
+  return modalStack[modalStack.length - 1] === id
 }
 </script>
 
@@ -58,9 +74,11 @@ const emit = defineEmits(['close'])
 const isOpen = ref(props.show)
 const isVisible = ref(props.show)
 const contentRef = useTemplateRef('content')
+const modalId = nextModalId++
 let closeTimerId = null
 // Whether this instance currently holds a body scroll lock (prevents double lock/unlock).
 let hasBodyLock = false
+let isRegisteredInStack = false
 
 function acquireBodyLock() {
   if (!hasBodyLock) {
@@ -73,6 +91,20 @@ function releaseBodyLock() {
   if (hasBodyLock) {
     unlockBodyScroll()
     hasBodyLock = false
+  }
+}
+
+function registerInModalStack() {
+  if (!isRegisteredInStack) {
+    registerModal(modalId)
+    isRegisteredInStack = true
+  }
+}
+
+function unregisterFromModalStack() {
+  if (isRegisteredInStack) {
+    unregisterModal(modalId)
+    isRegisteredInStack = false
   }
 }
 
@@ -91,6 +123,7 @@ watch(() => props.show, (val) => {
     requestAnimationFrame(() => {
       isVisible.value = true
     })
+    registerInModalStack()
     acquireBodyLock()
   } else {
     isVisible.value = false
@@ -99,6 +132,7 @@ watch(() => props.show, (val) => {
       isOpen.value = false
       closeTimerId = null
     }, 300)
+    unregisterFromModalStack()
     releaseBodyLock()
   }
 }, { immediate: true })
@@ -109,7 +143,7 @@ const close = () => {
 
 // Close on Escape key
 const handleKeydown = (e) => {
-  if (e.key === 'Escape' && props.show) {
+  if (e.key === 'Escape' && props.show && isTopModal(modalId)) {
     close()
   }
 }
@@ -121,6 +155,7 @@ onMounted(() => {
 onUnmounted(() => {
   clearCloseTimer()
   document.removeEventListener('keydown', handleKeydown)
+  unregisterFromModalStack()
   releaseBodyLock()
 })
 </script>

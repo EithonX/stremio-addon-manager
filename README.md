@@ -1,149 +1,114 @@
-# Stremio Addon Manager (v2.0)
+<div align="center">
+  <a href="https://github.com/EithonX/stremio-addon-manager">
+    <img src="public/logo.svg" alt="Stremio Addon Manager" width="92" height="92">
+  </a>
 
-<p align="center">
-  <img src="public/logo.svg" alt="Stremio Addon Manager" width="120">
-</p>
+  <h1>Stremio Addon Manager</h1>
 
+  <p>
+    <strong>Manage your Stremio addon order without reinstalling everything.</strong>
+  </p>
 
-> **Reimagined by [EithonX](https://github.com/EithonX)** > Based on the original work by Pancake3000.
+  <p>
+    Reorder, edit, back up, and restore your addon collection from a clean web interface.
+  </p>
 
-**Stremio Addon Manager** is a modern, secure, and responsive web application that allows you to easily reorder and manage your Stremio addons. 
+  <p>
+    <a href="https://github.com/EithonX/stremio-addon-manager/actions/workflows/ci.yml">
+      <img alt="CI" src="https://github.com/EithonX/stremio-addon-manager/actions/workflows/ci.yml/badge.svg">
+    </a>
+  </p>
 
-Stremio natively locks addons in the order of installation. To move a catalog up, users typically have to uninstall and reinstall everything. This tool solves that problem with a simple **Drag-and-Drop** interface.
+  <p>
+    <a href="#features">Features</a>
+    ·
+    <a href="#local-development">Local development</a>
+    ·
+    <a href="#deployment">Deployment</a>
+    ·
+    <a href="#credits">Credits</a>
+  </p>
+</div>
 
----
+## Overview
 
-## ✨ Features
+Stremio addon order is tied to install order. Moving one addon up usually means uninstalling and reinstalling others around it.
 
-- **🚀 Drag & Drop Reordering:** Instantly rearrange your addon load order.
-- **📱 Fully Responsive:** Works perfectly on Desktop, Tablets, and Mobile phones.
-- **🎨 Modern UI:** A complete redesign using Tailwind CSS with Dark/Light mode support.
-- **🔒 Secure Architecture:** - **Client-Side Only:** Your password is never stored on a server.
-  - **Local Storage:** AuthKey is stored locally in your browser and cleared on logout.
-  - **Secure Proxy:** Uses Cloudflare Functions to prevent CORS issues without exposing credentials.
-- **⚡ Blazing Fast:** Built on Vue 3 + Vite.
-- **🎬 Move System Addons:** Ability to push Cinemeta (Popular/Featured rows) down the list.
+Stremio Addon Manager loads your addon collection, lets you make local changes, and syncs the updated order back to your Stremio account.
 
----
+## Features
 
-## 🛠️ Tech Stack
+- Reorder addons with drag and drop
+- Add addons from manifest URLs or `stremio://` links
+- Edit addon manifests before syncing
+- Back up and restore addon collections as JSON
+- Review local changes before syncing them to Stremio
+- Use a responsive interface with light and dark mode
+- Route Stremio and manifest requests through Cloudflare Pages Functions
 
-- **Framework:** Vue 3 (Composition API)
-- **Build Tool:** Vite 6
-- **Styling:** Tailwind CSS 3.4
-- **Icons:** Lucide Vue Next
-- **Deployment:** Cloudflare Pages (Static + Functions)
+## Security and privacy
 
----
+- Passwords are used only to request a Stremio AuthKey.
+- AuthKeys are stored locally in your browser.
+- The Cloudflare Functions proxy does not persist credentials.
+- You can skip password login and paste an AuthKey directly.
 
-## 🚀 Getting Started
+> Treat your AuthKey like a password.
 
-### Prerequisites
+## Local development
 
-- Node.js (v18 or higher)
-- npm
-
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/EithonX/stremio-addon-manager.git
-   cd stremio-addon-manager
-   ```
-
-2. **Install dependencies:**
-   ```bash
-    npm install
-   ```
-
-
-### Local Development
-
-Because this project uses Cloudflare Pages Functions for `/api/login`, `/api/addonCollectionGet`, `/api/addonCollectionSet`, and `/api/manifest`, `npm run dev` is only useful for static UI work. It does not run the API proxy, so addon manifest loading through `/api/manifest` requires Wrangler.
-
-Use the Pages dev command:
 ```bash
+npm install
 npm run dev:pages
 ```
 
-Or run the steps manually:
+`npm run dev:pages` builds the app and starts Cloudflare Pages dev, which is required for the `/api/*` routes. Use `npm run dev` only when working on static UI without API calls.
 
-1. **Build the project:**
+## Quality checks
+
 ```bash
+npm test
 npm run build
 ```
 
+## Deployment
 
-2. **Run the local server:**
-```bash
-npx wrangler pages dev dist
-```
+Deploy on Cloudflare Pages with:
 
+- Build command: `npm run build`
+- Output directory: `dist`
 
-Open your browser to `http://localhost:8788`.
+Functions live in `functions/api` and are detected automatically.
 
----
+## AuthKey login
 
-## 🌐 Deployment (Cloudflare Pages)
+You can sign in normally or paste an existing Stremio AuthKey.
 
-This project is optimized for **Cloudflare Pages**.
+<details>
+<summary>How to retrieve your AuthKey manually</summary>
 
-1. Push your code to a GitHub repository.
-2. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com) and go to **Workers & Pages**.
-3. Click **Connect to Git** and select your repository.
-4. Use the following Build Settings:
-* **Framework Preset:** Vite
-* **Build Command:** `npm run build`
-* **Output Directory:** `dist`
+Log into [Stremio Web](https://web.stremio.com), open the browser console, and run:
 
-
-5. Click **Save and Deploy**.
-
-*Note: The `functions/api` directory will automatically be detected and deployed as a secure proxy.*
-
----
-
-## 🔑 How to Get Your AuthKey
-
-If you prefer not to enter your password, you can manually retrieve your AuthKey:
-
-**On Desktop (PC/Mac):**
-
-1. Log into [Stremio Web](https://web.stremio.com).
-2. Open Developer Tools (`F12`).
-3. Go to the **Console** tab, paste this, and hit Enter:
 ```js
 JSON.parse(localStorage.getItem("profile")).auth.key
 ```
 
+On mobile, type `javascript:` in the address bar, then paste this immediately after it:
 
-
-**On Mobile:**
-
-1. Open Stremio Web in Chrome.
-2. Type `javascript:` in the URL bar.
-3. Paste this code immediately after and hit Enter:
 ```js
 (t=document.createElement("textarea"),t.value=JSON.parse(localStorage.profile).auth.key,document.body.append(t),t.select(),document.execCommand("copy"),t.remove())
 ```
----
 
-## ⚠️ Disclaimer
+</details>
 
-> **Use at your own risk.**
+## Credits
 
-This is a community-developed tool and is not an official Stremio product.
+- Maintained by [EithonX](https://github.com/EithonX)
+- Based on original work by [Pancake3000](https://github.com/pancake3000/stremio-addon-manager)
+- Thanks to Sleeyax and `<Code/>` for initial research
 
-* It uses the official Stremio API to sync your addon collection.
-* There is no "Undo" button (though you can simply reinstall addons to reset them).
-* We do not accept responsibility for any issues that arise with your Stremio profile.
+Made with ❤️ for the Stremio community.
 
----
+## Disclaimer
 
-## ❤️ Credits
-
-* **Redesign & v2.0 Architecture:** [EithonX](https://github.com/EithonX)
-* **Original Creator:** [Pancake3000](https://www.google.com/search?q=https://github.com/Pancake3000)
-* **Special Thanks:** Sleeyax and \<Code/\> for initial research.
-
-Made with ❤️ for the Stremio Community.
+This project is not affiliated with Stremio. Use it at your own risk, and back up your addon collection before making major changes.

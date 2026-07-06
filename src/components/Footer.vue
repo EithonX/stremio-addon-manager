@@ -1,47 +1,77 @@
+<script setup>
+import { Github, Heart } from 'lucide-vue-next'
+
+const appVersion = __APP_VERSION__
+const repoUrl = 'https://github.com/EithonX/stremio-addon-manager'
+</script>
+
 <template>
-  <footer class="mt-auto border-t border-zinc-200 bg-white py-8 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950">
-    <div class="mx-auto max-w-7xl px-4">
-      <p class="mb-2 flex items-center justify-center gap-1.5">
-        Made with 
-        <span class="inline-block animate-pulse text-red-500" aria-label="love">❤️</span> 
-        by 
-        <a 
-          href="https://github.com/EithonX" 
-          class="font-medium text-blue-600 transition-colors hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+  <footer class="mt-auto border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+    <div class="mx-auto flex max-w-6xl flex-col items-center gap-2 px-4 py-5 sm:flex-row sm:justify-between sm:gap-4 sm:px-8">
+
+      <!-- primary: made by + source -->
+      <p class="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+        Made with
+        <Heart class="h-3.5 w-3.5 animate-heartbeat fill-red-500 text-red-500" aria-label="love" />
+        by
+        <a
+          href="https://github.com/EithonX"
           target="_blank"
           rel="noopener noreferrer"
+          class="font-semibold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
         >
           EithonX
         </a>
-      </p>
-      <p class="text-xs text-zinc-400 dark:text-zinc-600">
-        Based on open source work by 
-        <a 
-          href="https://github.com/pancake3000/stremio-addon-manager" 
-          class="text-zinc-500 transition-colors hover:text-zinc-700 hover:underline dark:text-zinc-500 dark:hover:text-zinc-400"
-          target="_blank" 
+        <span class="text-zinc-300 dark:text-zinc-700">·</span>
+        <a
+          :href="repoUrl"
+          target="_blank"
           rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 font-medium text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
         >
-          Pancake3000
+          <Github class="h-3.5 w-3.5" />
+          Source
         </a>
       </p>
+
+      <!-- secondary: version + attribution -->
+      <p class="flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-600">
+        <span class="font-medium">v{{ appVersion }}</span>
+        <span class="text-zinc-300 dark:text-zinc-700">·</span>
+        <a
+          href="https://github.com/pancake3000/stremio-addon-manager"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="transition-colors hover:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          based on Pancake3000
+        </a>
+      </p>
+
     </div>
   </footer>
 </template>
 
 <style scoped>
-@keyframes pulse {
+@keyframes heartbeat {
   0%, 100% {
-    opacity: 1;
     transform: scale(1);
   }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1);
+  15% {
+    transform: scale(1.25);
+  }
+  30% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.15);
+  }
+  60% {
+    transform: scale(1);
   }
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.animate-heartbeat {
+  animation: heartbeat 2.5s ease-in-out infinite;
 }
 </style>

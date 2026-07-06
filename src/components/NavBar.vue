@@ -1,5 +1,5 @@
 <script setup>
-import { ShieldCheck } from 'lucide-vue-next'
+import AppLogo from './AppLogo.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import ProfileMenu from './ui/ProfileMenu.vue'
 
@@ -14,9 +14,7 @@ const appVersion = __APP_VERSION__
     <div class="max-w-6xl mx-auto px-4 sm:px-8 h-16 md:h-20 flex items-center justify-between">
       
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
-          <ShieldCheck class="w-5 h-5 md:w-6 md:h-6" />
-        </div>
+        <AppLogo class="h-9 w-9 md:h-10 md:w-10 shadow-lg shadow-blue-600/20 rounded-[11px]" />
         <div>
           <h1 class="font-bold text-lg md:text-xl leading-none tracking-tight text-zinc-900 dark:text-zinc-100">Stremio Addon Manager</h1>
           <p class="text-[10px] md:text-xs font-bold text-zinc-500 mt-1">v{{ appVersion }} by EithonX</p>

@@ -45,6 +45,7 @@ const localAddons = ref([])
 const currentEditIndex = ref(null)
 const currentEditManifest = ref(null)
 const currentEditURL = ref('')
+const isEditDirty = ref(false)
 const edgeDragScroll = createEdgeDragScroll(() => window)
 
 // Confirmation State
@@ -105,7 +106,33 @@ const handleEdit = (index) => {
   currentEditIndex.value = realIndex
   currentEditManifest.value = JSON.parse(JSON.stringify(addon.manifest))
   currentEditURL.value = addon.transportUrl
+  isEditDirty.value = false
   isEditModalOpen.value = true
+}
+
+const closeEditModal = () => {
+  isEditDirty.value = false
+  isEditModalOpen.value = false
+}
+
+// Backdrop / Escape close for the edit modal (DynamicForm handles its own X/Cancel)
+const handleEditModalCloseRequest = () => {
+  if (!isEditDirty.value) {
+    closeEditModal()
+    return
+  }
+
+  confirmModal.value = {
+    show: true,
+    title: 'Discard unsaved changes?',
+    message: 'You have manifest edits that have not been saved. Closing the editor will discard them.',
+    confirmText: 'Discard changes',
+    type: 'danger',
+    action: () => {
+      closeEditModal()
+      confirmModal.value.show = false
+    }
+  }
 }
 
 const handleRemove = (index) => {
@@ -136,7 +163,7 @@ const handleSaveManifest = (newManifest) => {
     }
     emit('update:addons', newAddons)
   }
-  isEditModalOpen.value = false
+  closeEditModal()
 }
 
 const openAddModal = () => {
@@ -548,21 +575,22 @@ onUnmounted(() => {
     </Modal>
 
     <!-- Detailed Edit Modal -->
-    <Modal 
+    <Modal
       :show="isEditModalOpen"
-      @close="isEditModalOpen = false"
+      @close="handleEditModalCloseRequest"
       max-width="max-w-4xl"
       no-header
       no-padding
       v-slot="{ scrollContainer }"
     >
-      <DynamicForm 
+      <DynamicForm
         v-if="currentEditManifest"
         :manifest="currentEditManifest"
         :manifestURL="currentEditURL"
         :scroll-container="scrollContainer"
         @update-manifest="handleSaveManifest"
-        @cancel="isEditModalOpen = false"
+        @cancel="closeEditModal"
+        @dirty-change="isEditDirty = $event"
       />
     </Modal>
 

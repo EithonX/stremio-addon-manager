@@ -25,7 +25,7 @@ const props = defineProps({
   scrollContainer: { type: Object, default: null },
 })
 
-const emit = defineEmits(['update-manifest', 'cancel'])
+const emit = defineEmits(['update-manifest', 'cancel', 'dirty-change'])
 
 const isAdvancedMode = ref(false)
 const formModel = ref({
@@ -173,6 +173,9 @@ watch(() => props.manifest, (newManifest) => {
 watch(formModel, checkForChanges, { deep: true })
 watch(jsonModel, () => { if (isAdvancedMode.value) checkForChanges() })
 
+// Notify parent (backdrop/Escape close lives there) about dirty state
+watch(hasUnsavedChanges, (dirty) => emit('dirty-change', dirty), { immediate: true })
+
 function checkForChanges() {
   if (!initialManifest.value) return
   
@@ -241,6 +244,25 @@ function handleSubmit() {
     }
   } else {
     emit('update-manifest', toSanitizedManifest(formModel.value))
+  }
+}
+
+function requestCloseEditor() {
+  if (!hasUnsavedChanges.value) {
+    emit('cancel')
+    return
+  }
+
+  confirmModal.value = {
+    show: true,
+    title: 'Discard unsaved changes?',
+    message: 'You have manifest edits that have not been saved. Closing the editor will discard them.',
+    confirmText: 'Discard changes',
+    type: 'danger',
+    action: () => {
+      confirmModal.value.show = false
+      emit('cancel')
+    }
   }
 }
 
@@ -535,7 +557,16 @@ async function executeReset() {
         <h3 class="truncate text-base md:text-lg font-semibold leading-tight text-zinc-900 dark:text-white">
           {{ formModel.name || 'Untitled Addon' }}
         </h3>
-        <p class="text-xs text-zinc-500 dark:text-zinc-500">Edit manifest</p>
+        <div class="flex items-center gap-2">
+          <p class="text-xs text-zinc-500 dark:text-zinc-500">Edit manifest</p>
+          <span
+            v-if="hasUnsavedChanges"
+            class="inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+            Unsaved
+          </span>
+        </div>
       </div>
 
       <div class="flex items-center gap-1.5 shrink-0">
@@ -560,7 +591,7 @@ async function executeReset() {
         </div>
 
         <button
-          @click="$emit('cancel')"
+          @click="requestCloseEditor"
           class="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
           title="Close"
           aria-label="Close editor"
@@ -819,18 +850,28 @@ async function executeReset() {
     <!-- Footer Actions (Station) -->
     <div class="sticky bottom-0 z-20 flex flex-col-reverse items-center justify-between gap-3 rounded-b-2xl border-t border-zinc-200/80 bg-white/90 px-4 py-3.5 backdrop-blur-md dark:border-white/5 dark:bg-zinc-900/85 md:flex-row md:px-6">
 
-      <button
-        @click="handleReset"
-        class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800 md:w-auto"
-        :disabled="isResetting"
-      >
-        <RotateCcw class="h-4 w-4" :class="{ 'animate-spin': isResetting }" />
-        {{ isResetting ? 'Resetting...' : 'Reset to Default' }}
-      </button>
+      <div class="flex w-full items-center gap-3 md:w-auto">
+        <button
+          @click="handleReset"
+          class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800 md:w-auto"
+          :disabled="isResetting"
+        >
+          <RotateCcw class="h-4 w-4" :class="{ 'animate-spin': isResetting }" />
+          {{ isResetting ? 'Resetting...' : 'Reset to Default' }}
+        </button>
+
+        <span
+          class="hidden items-center gap-1.5 text-xs md:inline-flex"
+          :class="hasUnsavedChanges ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-500'"
+        >
+          <span class="h-1.5 w-1.5 rounded-full" :class="hasUnsavedChanges ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600'"></span>
+          {{ hasUnsavedChanges ? 'Unsaved changes' : 'No unsaved changes' }}
+        </span>
+      </div>
 
       <div class="flex w-full gap-2.5 md:w-auto">
         <button
-          @click="$emit('cancel')"
+          @click="requestCloseEditor"
           class="flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800 md:flex-none"
         >
           Cancel

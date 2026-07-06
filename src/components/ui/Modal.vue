@@ -1,3 +1,31 @@
+<script>
+// Reference-counted body scroll lock shared across ALL Modal instances.
+// Must live in a plain <script> block: <script setup> top-level state is
+// compiled into setup() and would be per-instance, defeating the counter.
+// Nested/overlapping modals stay locked until the last one releases its lock.
+let modalBodyLockCount = 0
+let previousBodyOverflow = ''
+
+function lockBodyScroll() {
+  if (typeof document === 'undefined') return
+  if (modalBodyLockCount === 0) {
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  modalBodyLockCount += 1
+}
+
+function unlockBodyScroll() {
+  if (typeof document === 'undefined') return
+  if (modalBodyLockCount === 0) return
+  modalBodyLockCount -= 1
+  if (modalBodyLockCount === 0) {
+    document.body.style.overflow = previousBodyOverflow
+    previousBodyOverflow = ''
+  }
+}
+</script>
+
 <script setup>
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { X } from 'lucide-vue-next'
@@ -31,6 +59,22 @@ const isOpen = ref(props.show)
 const isVisible = ref(props.show)
 const contentRef = useTemplateRef('content')
 let closeTimerId = null
+// Whether this instance currently holds a body scroll lock (prevents double lock/unlock).
+let hasBodyLock = false
+
+function acquireBodyLock() {
+  if (!hasBodyLock) {
+    lockBodyScroll()
+    hasBodyLock = true
+  }
+}
+
+function releaseBodyLock() {
+  if (hasBodyLock) {
+    unlockBodyScroll()
+    hasBodyLock = false
+  }
+}
 
 function clearCloseTimer() {
   if (closeTimerId !== null) {
@@ -47,7 +91,7 @@ watch(() => props.show, (val) => {
     requestAnimationFrame(() => {
       isVisible.value = true
     })
-    document.body.style.overflow = 'hidden'
+    acquireBodyLock()
   } else {
     isVisible.value = false
     // Wait for transition to finish before hiding
@@ -55,7 +99,7 @@ watch(() => props.show, (val) => {
       isOpen.value = false
       closeTimerId = null
     }, 300)
-    document.body.style.overflow = ''
+    releaseBodyLock()
   }
 }, { immediate: true })
 
@@ -77,7 +121,7 @@ onMounted(() => {
 onUnmounted(() => {
   clearCloseTimer()
   document.removeEventListener('keydown', handleKeydown)
-  document.body.style.overflow = ''
+  releaseBodyLock()
 })
 </script>
 

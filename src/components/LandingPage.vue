@@ -81,9 +81,16 @@ const handleLogin = () => {
     return
   }
 
-  if (protectedSelection.value) {
+  if (protectedSelection.value && !trimmedPassword.value) {
     setAccountNotice('Unlock the saved AuthKey first, then connect.', 'error')
     return
+  }
+
+  if (protectedSelection.value && trimmedPassword.value) {
+    protectedSelection.value = null
+    unlockPin.value = ''
+    manualKey.value = ''
+    accountNotice.value = ''
   }
 
   if (shouldUseAuthKeyLogin.value) {

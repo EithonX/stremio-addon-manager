@@ -90,11 +90,31 @@ const dragTouchDelay = 180
 const dragTouchThreshold = 8
 const dragFallbackTolerance = 10
 const useFallbackDrag = useMediaQuery('(pointer: coarse)')
+let nextAddonClientKey = 1
+
+function ensureAddonClientKeys(addons) {
+  if (!Array.isArray(addons)) return addons
+
+  addons.forEach((addon) => {
+    if (!addon || typeof addon !== 'object') return
+
+    const descriptor = Object.getOwnPropertyDescriptor(addon, '__clientKey')
+    if (descriptor && !descriptor.enumerable && typeof descriptor.value === 'string') return
+
+    Object.defineProperty(addon, '__clientKey', {
+      value: `addon-${Date.now()}-${nextAddonClientKey++}`,
+      enumerable: false,
+      configurable: true,
+    })
+  })
+
+  return addons
+}
 
 watch(
   () => props.addons,
   (addons) => {
-    localAddons.value = normalizeAddonCollection(addons)
+    localAddons.value = ensureAddonClientKeys(normalizeAddonCollection(addons))
   },
   { immediate: true },
 )
@@ -214,6 +234,7 @@ const installAddon = async () => {
         throw new Error('Manifest payload is missing required fields (id/version).')
       }
 
+      ensureAddonClientKeys([nextAddon])
       const newAddons = [...localAddons.value, nextAddon]
       emit('update:addons', newAddons)
       isAddModalOpen.value = false
@@ -237,8 +258,13 @@ const backupConfig = () => {
   const a = document.createElement('a')
   a.href = url
   a.download = `stremio-addons-backup-${new Date().toISOString().slice(0,10)}.json`
+  a.style.display = 'none'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => {
+    a.remove()
+    URL.revokeObjectURL(url)
+  }, 100)
 }
 
 const restoreConfig = () => {
@@ -534,7 +560,7 @@ onUnmounted(() => {
       <Draggable 
         v-if="canDrag"
         :list="localAddons"
-        item-key="transportUrl"
+        item-key="__clientKey"
         handle=".drag-handle"
         filter="button,a,input,textarea,select,[data-no-drag]"
         :prevent-on-filter="false"
@@ -572,7 +598,7 @@ onUnmounted(() => {
       <div v-else class="flex flex-col gap-3 pb-20">
          <AddonItem 
             v-for="(element, index) in displayedAddons"
-            :key="element.transportUrl"
+            :key="element.__clientKey"
             :addon="element"
             :is-locked="isLocked"
             @remove="handleRemove(index)"

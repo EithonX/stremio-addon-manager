@@ -1,6 +1,6 @@
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
-const PBKDF2_ITERATIONS = 310000
+export const PBKDF2_ITERATIONS = 310000
 
 function bytesToBase64(bytes) {
   let binary = ''
@@ -25,7 +25,12 @@ function bytesToHex(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function deriveKey(pin, saltBytes, usages) {
+export function normalizeKdfIterations(iterations) {
+  const value = Number(iterations)
+  return Number.isSafeInteger(value) && value > 0 ? value : PBKDF2_ITERATIONS
+}
+
+async function deriveKey(pin, saltBytes, usages, iterations = PBKDF2_ITERATIONS) {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     encoder.encode(pin),
@@ -38,7 +43,7 @@ async function deriveKey(pin, saltBytes, usages) {
     {
       name: 'PBKDF2',
       salt: saltBytes,
-      iterations: PBKDF2_ITERATIONS,
+      iterations: normalizeKdfIterations(iterations),
       hash: 'SHA-256'
     },
     keyMaterial,
@@ -82,7 +87,7 @@ export async function decryptAuthKey(account, pin) {
   const salt = base64ToBytes(account.authKeySalt)
   const iv = base64ToBytes(account.authKeyIv)
   const ciphertext = base64ToBytes(account.authKeyEncrypted)
-  const key = await deriveKey(pin, salt, ['decrypt'])
+  const key = await deriveKey(pin, salt, ['decrypt'], account.authKeyKdfIterations ?? PBKDF2_ITERATIONS)
   const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
     key,

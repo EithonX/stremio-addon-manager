@@ -1,4 +1,5 @@
 import { useStorage } from '@vueuse/core'
+import { PBKDF2_ITERATIONS, normalizeKdfIterations } from '../../utils/cryptoVault'
 
 export const DEFAULT_SAVED_ACCOUNT = Object.freeze({
   email: '',
@@ -39,9 +40,9 @@ function normalizeSavedAccount(account) {
     normalized.authKeyEncrypted = account.authKeyEncrypted
     normalized.authKeyIv = account.authKeyIv
     normalized.authKeySalt = account.authKeySalt
-    normalized.authKeyKdfIterations = Number.isFinite(account.authKeyKdfIterations)
-      ? account.authKeyKdfIterations
-      : 310000
+    normalized.authKeyKdfIterations = account.authKeyKdfIterations == null
+      ? PBKDF2_ITERATIONS
+      : normalizeKdfIterations(account.authKeyKdfIterations)
   } else if (typeof account.authKey === 'string' && account.authKey) {
     normalized.authKey = account.authKey
     normalized.protected = false

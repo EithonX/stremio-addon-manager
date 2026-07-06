@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { shallowRef, computed, onMounted, onUnmounted, useTemplateRef } from 'vue'
 import { ChevronDown, Edit2, Trash2, Check, Lock } from 'lucide-vue-next'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { useSavedAccounts } from '../features/accounts/useSavedAccounts'
@@ -15,14 +15,14 @@ const {
 } = useSavedAccounts()
 const DEFAULT_EMAIL = defaultSavedAccount.email
 
-const selectedEmail = ref(DEFAULT_EMAIL)
-const isEditing = ref(false)
-const editLabel = ref('')
-const isDropdownOpen = ref(false)
-const dropdownRef = ref(null)
+const selectedEmail = shallowRef(DEFAULT_EMAIL)
+const isEditing = shallowRef(false)
+const editLabel = shallowRef('')
+const isDropdownOpen = shallowRef(false)
+const dropdownRef = useTemplateRef('dropdownRef')
 
 // Confirmation Modal State
-const showConfirm = ref(false)
+const showConfirm = shallowRef(false)
 
 // Computed
 const displayAccounts = computed(() => {
@@ -83,33 +83,43 @@ function handleClickOutside(event) {
   }
 }
 
+function handleKeydown(event) {
+  if (event.key === 'Escape') {
+    isDropdownOpen.value = false
+  }
+}
+
 onMounted(() => {
   ensureNormalized()
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
 <template>
   <div v-if="savedAccounts.length > 0" class="w-full space-y-2">
     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-      Switch Account
+      Saved account
     </label>
     
     <div class="flex gap-2">
       <!-- Custom Dropdown -->
-      <div class="relative flex-grow" ref="dropdownRef">
+      <div ref="dropdownRef" class="relative flex-grow min-w-0">
         <button 
           @click="isDropdownOpen = !isDropdownOpen"
           type="button"
-          class="w-full h-11 pl-4 pr-10 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-left flex items-center"
+          aria-haspopup="listbox"
+          :aria-expanded="isDropdownOpen"
+          class="relative flex h-11 w-full items-center rounded-xl border border-zinc-200 bg-zinc-50/80 pl-3.5 pr-10 text-left text-sm text-zinc-900 outline-none transition-all hover:border-zinc-300 focus-visible:border-blue-400 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-950/50 dark:text-zinc-100 dark:hover:border-white/20 dark:focus-visible:border-blue-500 dark:focus-visible:bg-zinc-950"
         >
-          <span class="truncate block w-full">{{ currentLabel }}</span>
+          <span class="block min-w-0 truncate font-medium">{{ currentLabel }}</span>
           
-          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-zinc-500">
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 dark:text-zinc-400">
             <ChevronDown class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isDropdownOpen }" />
           </div>
         </button>
@@ -125,16 +135,19 @@ onUnmounted(() => {
         >
           <div 
             v-if="isDropdownOpen" 
-            class="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 max-h-60 overflow-auto custom-scrollbar p-1 space-y-0.5"
+            role="listbox"
+            class="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-2xl border border-zinc-200 bg-white/95 p-1 shadow-xl shadow-zinc-900/10 backdrop-blur custom-scrollbar dark:border-white/10 dark:bg-zinc-900/95 dark:shadow-black/30"
           >
             <!-- Default Option -->
              <button
                 @click="selectAccount(DEFAULT_EMAIL)"
                 type="button"
-                class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors"
-                :class="selectedEmail === DEFAULT_EMAIL ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'"
+                role="option"
+                :aria-selected="selectedEmail === DEFAULT_EMAIL"
+                class="flex min-h-10 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
+                :class="selectedEmail === DEFAULT_EMAIL ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5'"
               >
-                <span>{{ defaultSavedAccount.label }}</span>
+                <span class="truncate">{{ defaultSavedAccount.label }}</span>
                 <Check v-if="selectedEmail === DEFAULT_EMAIL" class="w-4 h-4" />
               </button>
 
@@ -144,11 +157,13 @@ onUnmounted(() => {
                 :key="acc.email" 
                 @click="selectAccount(acc.email)"
                 type="button"
-                class="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors"
-                :class="selectedEmail === acc.email ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'"
+                role="option"
+                :aria-selected="selectedEmail === acc.email"
+                class="flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
+                :class="selectedEmail === acc.email ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5'"
               >
-                <div class="flex flex-col truncate pr-2">
-                  <span class="font-medium truncate flex items-center gap-1.5">
+                <div class="flex min-w-0 flex-col pr-2">
+                  <span class="flex items-center gap-1.5 truncate font-medium">
                     {{ acc.label }}
                     <Lock v-if="acc.protected" class="w-3 h-3 text-amber-500 shrink-0" />
                   </span>
@@ -168,8 +183,9 @@ onUnmounted(() => {
         <button 
           @click.stop="startRename"
           type="button"
-          title="Rename Account"
-          class="h-11 w-11 flex items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-900 transition-all"
+          title="Rename account"
+          aria-label="Rename saved account"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50/80 text-zinc-500 transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-950/50 dark:text-zinc-400 dark:hover:border-blue-500/30 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
         >
           <Edit2 class="w-4 h-4" />
         </button>
@@ -177,8 +193,9 @@ onUnmounted(() => {
         <button 
           @click.stop="confirmRemove"
           type="button"
-          title="Remove Account"
-          class="h-11 w-11 flex items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-500 hover:text-red-600 hover:border-red-200 dark:hover:border-red-900 transition-all"
+          title="Remove account"
+          aria-label="Remove saved account"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50/80 text-zinc-500 transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-500/10 dark:border-white/10 dark:bg-zinc-950/50 dark:text-zinc-400 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
         >
           <Trash2 class="w-4 h-4" />
         </button>
@@ -186,26 +203,26 @@ onUnmounted(() => {
     </div>
 
     <!-- Edit Label Modal/Input (Inline for simplicity) -->
-    <div v-if="isEditing" class="flex gap-2 items-center mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800/50">
+    <div v-if="isEditing" class="mt-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-2.5 dark:border-white/10 dark:bg-zinc-950/40">
       <input 
         v-model="editLabel"
         ref="editInput"
-        class="flex-grow bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-        placeholder="Account Label"
+        class="h-9 min-w-0 flex-grow rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus-visible:border-blue-400 focus-visible:ring-4 focus-visible:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:focus-visible:border-blue-500"
+        placeholder="Account label"
         @keyup.enter="saveRename"
         @keyup.esc="isEditing = false"
       />
       <button 
         @click="saveRename"
         type="button"
-        class="text-xs font-bold text-blue-600 dark:text-blue-400 px-3 py-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+        class="h-9 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white shadow-sm shadow-blue-500/15 transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/20"
       >
         Save
       </button>
       <button 
         @click="isEditing = false"
         type="button"
-        class="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1.5"
+        class="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-500/10 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
         Cancel
       </button>
@@ -214,8 +231,8 @@ onUnmounted(() => {
     <!-- Confirmation Modal -->
     <ConfirmationModal 
       :show="showConfirm"
-      title="Remove Account?"
-      :message="`Are you sure you want to remove '${currentLabel}' from saved accounts?`"
+      title="Remove saved account?"
+      :message="`Remove ${currentLabel} from saved accounts on this device? This will not affect your Stremio account.`"
       confirm-text="Remove"
       type="danger"
       @close="showConfirm = false"

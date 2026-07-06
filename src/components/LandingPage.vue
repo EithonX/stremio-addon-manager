@@ -139,7 +139,7 @@ watch(width, (value) => {
     <div class="grid lg:grid-cols-[1.05fr_0.95fr] gap-6 lg:gap-8 items-start">
       <section class="card-base p-5 md:p-6 shadow-xl shadow-zinc-200/40 dark:shadow-black/40 ring-1 ring-zinc-900/5 dark:ring-white/10 space-y-5">
         <div>
-          <h3 class="font-bold text-xl text-zinc-900 dark:text-white">Sign In</h3>
+          <h3 class="font-bold text-xl text-zinc-900 dark:text-white">Sign in</h3>
           <p class="text-zinc-500 text-sm mt-1">Use email/password or connect directly with AuthKey.</p>
         </div>
         
@@ -214,7 +214,7 @@ watch(width, (value) => {
 
         <div class="relative flex items-center">
           <div class="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
-          <span class="flex-shrink-0 mx-4 text-[10px] font-bold uppercase tracking-widest text-zinc-400">Or using AuthKey</span>
+          <span class="flex-shrink-0 mx-4 text-[10px] font-bold uppercase tracking-widest text-zinc-400">Or use AuthKey</span>
           <div class="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
         </div>
 
@@ -236,7 +236,7 @@ watch(width, (value) => {
         <div class="card-base p-4 md:p-5 overflow-hidden min-w-0">
           <h3 class="text-base md:text-lg font-bold flex items-center gap-2 text-zinc-900 dark:text-white mb-2">
             <Key class="w-5 h-5 text-blue-600" />
-            Get your AuthKey quickly
+            Get your AuthKey
           </h3>
           <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Log into Stremio first, then use one of these quick methods.</p>
 

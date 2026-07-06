@@ -2,7 +2,7 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
-import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, PackageOpen, X } from 'lucide-vue-next'
+import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, PackageOpen, X, Link2, CircleAlert, LoaderCircle } from 'lucide-vue-next'
 import AddonItem from './AddonItem.vue'
 import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
@@ -38,6 +38,8 @@ const searchQuery = ref('')
 const isEditModalOpen = ref(false)
 const isAddModalOpen = ref(false)
 const newAddonUrl = ref('')
+const isAddingAddon = ref(false)
+const addAddonError = ref('')
 const isLocked = ref(false)
 const isDragging = ref(false)
 const localAddons = ref([])
@@ -166,20 +168,41 @@ const handleSaveManifest = (newManifest) => {
   closeEditModal()
 }
 
+let addAddonRunId = 0
+
 const openAddModal = () => {
     isAddModalOpen.value = true
     newAddonUrl.value = ''
+    addAddonError.value = ''
+    isAddingAddon.value = false
+}
+
+const closeAddModal = () => {
+    if (isAddingAddon.value) return
+    isAddModalOpen.value = false
+    newAddonUrl.value = ''
+    addAddonError.value = ''
 }
 
 const installAddon = async () => {
+    if (isAddingAddon.value) return
+
     const url = normalizeManifestUrl(newAddonUrl.value)
     if (!url) {
-      alert('Invalid URL. Use a valid http(s) or stremio:// manifest URL.')
+      addAddonError.value = 'Use a valid http(s) or stremio:// manifest URL.'
       return
     }
 
+    const runId = ++addAddonRunId
+    isAddingAddon.value = true
+    addAddonError.value = ''
+
     try {
       const manifest = await fetchAddonManifest(url)
+
+      // Ignore results from a stale request or one whose modal was closed.
+      if (runId !== addAddonRunId || !isAddModalOpen.value) return
+
       const nextAddon = normalizeAddonRecord({
         transportUrl: url,
         manifest,
@@ -194,8 +217,14 @@ const installAddon = async () => {
       emit('update:addons', newAddons)
       isAddModalOpen.value = false
       newAddonUrl.value = ''
+      addAddonError.value = ''
     } catch (e) {
-      alert(`Failed to load addon: ${e.message}`)
+      if (runId !== addAddonRunId || !isAddModalOpen.value) return
+      addAddonError.value = e?.message
+        ? `Couldn't fetch that manifest: ${e.message}`
+        : "Couldn't fetch that manifest. Check the URL and try again."
+    } finally {
+      if (runId === addAddonRunId) isAddingAddon.value = false
     }
 }
 
@@ -546,30 +575,59 @@ onUnmounted(() => {
     <!-- Add Addon Modal -->
     <Modal
       :show="isAddModalOpen"
-      @close="isAddModalOpen = false"
-      title="Add New Addon"
+      @close="closeAddModal"
+      title="Add addon"
       max-width="max-w-md"
     >
-      <div class="space-y-4">
+      <div class="space-y-3">
         <p class="text-sm text-zinc-600 dark:text-zinc-400">
-          Enter the manifest URL of the addon you want to add.
+          Paste a manifest URL or Stremio install link.
         </p>
-        <input 
-          v-model="newAddonUrl"
-          placeholder="https://example.com/manifest.json" 
-          class="input-field"
-          @keyup.enter="installAddon"
-        />
-        <div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-xs text-blue-700 dark:text-blue-300">
-          <strong>Tip:</strong> If you have a Stremio link (stremio://), just paste it. We'll handle it.
+
+        <div class="relative">
+          <Link2 class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <input
+            v-model="newAddonUrl"
+            placeholder="https://example.com/manifest.json"
+            spellcheck="false"
+            autocomplete="off"
+            :disabled="isAddingAddon"
+            class="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-9 pr-3 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+            @input="addAddonError = ''"
+            @keyup.enter="installAddon"
+          />
+        </div>
+
+        <p class="px-0.5 text-xs text-zinc-400 dark:text-zinc-500">
+          Supports <span class="font-medium text-zinc-500 dark:text-zinc-400">https://.../manifest.json</span> and <span class="font-medium text-zinc-500 dark:text-zinc-400">stremio://</span> links. The manifest is fetched before adding.
+        </p>
+
+        <div
+          v-if="addAddonError"
+          class="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+        >
+          <CircleAlert class="mt-px h-4 w-4 shrink-0" />
+          <span>{{ addAddonError }}</span>
         </div>
       </div>
       <template #footer>
-        <button @click="isAddModalOpen = false" class="px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
+        <button
+          type="button"
+          @click="closeAddModal"
+          :disabled="isAddingAddon"
+          class="inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold text-zinc-500 transition hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-200 dark:disabled:hover:text-zinc-400"
+        >
           Cancel
         </button>
-        <button @click="installAddon" class="btn-primary" :disabled="!newAddonUrl">
-          Add Addon
+        <button
+          type="button"
+          @click="installAddon"
+          :disabled="!newAddonUrl || isAddingAddon"
+          class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-500/20 transition hover:bg-blue-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:hover:bg-blue-600 disabled:active:scale-100"
+        >
+          <LoaderCircle v-if="isAddingAddon" class="h-4 w-4 animate-spin" />
+          <Plus v-else class="h-4 w-4" />
+          <span>{{ isAddingAddon ? 'Checking...' : 'Add addon' }}</span>
         </button>
       </template>
     </Modal>

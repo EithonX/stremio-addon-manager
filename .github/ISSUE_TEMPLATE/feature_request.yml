@@ -1,0 +1,40 @@
+name: Feature Request
+description: Suggest an idea for Stremio Addon Manager
+title: '[FEATURE] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature!
+  - type: textarea
+    id: feature-summary
+    attributes:
+      label: Feature Summary
+      description: A clear and concise description of the requested feature or improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe it clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you envision this working or what interface changes would be needed.
+    validations:
+      required: true
+  - type: textarea
+    id: alternative-solutions
+    attributes:
+      label: Alternative Solutions
+      description: Describe any alternative solutions or features you have considered.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any mockups, screenshots, or context here.

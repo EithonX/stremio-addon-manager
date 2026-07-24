@@ -1,6 +1,23 @@
 {
   "name": "stremio-addon-manager-reimagined",
   "version": "2.2.0",
+  "description": "Stremio Addon Manager is a modern, secure, and responsive web application that allows you to easily reorder and manage your Stremio addons.",
+  "author": "EithonX",
+  "license": "GPL-3.0",
+  "homepage": "https://stremio-addon-manager-2-0.pages.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EithonX/stremio-addon-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EithonX/stremio-addon-manager/issues"
+  },
+  "keywords": [
+    "stremio",
+    "addon-manager",
+    "vue3",
+    "vite"
+  ],
   "private": true,
   "type": "module",
   "scripts": {

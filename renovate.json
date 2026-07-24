@@ -9,5 +9,6 @@
   ],
   "automerge": true,
   "platformAutomerge": true,
-  "automergeType": "branch"
+  "automergeType": "branch",
+  "dependencyDashboard": false
 }

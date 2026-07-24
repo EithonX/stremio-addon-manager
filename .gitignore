@@ -33,6 +33,7 @@ Thumbs.db
 # Environment Variables (Crucial for security)
 .env
 .env.*
+.envrc
 !.env.example
 
 # Testing

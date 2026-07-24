@@ -17,6 +17,12 @@
     <a href="https://github.com/EithonX/stremio-addon-manager/actions/workflows/ci.yml">
       <img alt="CI" src="https://github.com/EithonX/stremio-addon-manager/actions/workflows/ci.yml/badge.svg">
     </a>
+    <a href="https://stremio-addon-manager-2-0.pages.dev">
+      <img alt="Live Demo" src="https://img.shields.io/badge/Live%20Demo-Cloudflare%20Pages-orange?logo=cloudflare">
+    </a>
+    <a href="LICENSE">
+      <img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue.svg">
+    </a>
   </p>
 
   <p>
@@ -26,7 +32,9 @@
     ·
     <a href="#deployment">Deployment</a>
     ·
-    <a href="#credits">Credits</a>
+    <a href="#contributing">Contributing</a>
+    ·
+    <a href="#license">License</a>
   </p>
 </div>
 
@@ -43,7 +51,7 @@ Stremio Addon Manager loads your addon collection, lets you make local changes, 
 - Edit addon manifests before syncing
 - Back up and restore addon collections as JSON
 - Review local changes before syncing them to Stremio
-- Use a responsive interface with light and dark mode
+- Responsive interface with light and dark mode
 - Route Stremio and manifest requests through Cloudflare Pages Functions
 
 ## Security and privacy
@@ -101,13 +109,19 @@ On mobile, type `javascript:` in the address bar, then paste this immediately af
 
 </details>
 
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on code style and quality check requirements.
+
 ## Credits
 
 - Maintained by [EithonX](https://github.com/EithonX)
 - Based on original work by [Pancake3000](https://github.com/pancake3000/stremio-addon-manager)
 - Thanks to Sleeyax and `<Code/>` for initial research
 
-Made with ❤️ for the Stremio community.
+## License
+
+This project is open-source software licensed under the [GNU General Public License v3.0](LICENSE).
 
 ## Disclaimer
 

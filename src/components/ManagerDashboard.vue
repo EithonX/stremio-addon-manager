@@ -177,7 +177,7 @@ const handleRemove = (index) => {
   confirmModal.value = {
     show: true,
     title: 'Remove addon?',
-    message: `Remove ${addonName} from your local list? Sync your list afterward to update Stremio.`,
+    message: `Remove ${addonName} from your local list? You still need to sync changes to save this to Stremio.`,
     confirmText: 'Remove',
     type: 'danger',
     action: () => {
@@ -263,7 +263,7 @@ const installAddon = async () => {
       })
 
       if (!nextAddon) {
-        throw new Error('This addon link returned incomplete settings. Try another link.')
+        throw new Error('Manifest payload is missing required fields (id/version).')
       }
 
       const existingIndex = localAddons.value.findIndex(addon => addon.transportUrl === nextAddon.transportUrl)
@@ -378,9 +378,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative isolate mx-auto max-w-6xl px-4 py-6 sm:px-8">
+  <div class="container relative isolate mx-auto max-w-5xl px-4 py-3">
     <div
-      class="mb-3 rounded-2xl border border-zinc-200 bg-white/75 p-3 shadow-sm shadow-zinc-200/60 backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/5 dark:bg-zinc-900/70 dark:shadow-black/30 lg:sticky lg:top-24 lg:z-30"
+      class="mb-3 rounded-2xl border border-zinc-200 bg-white/75 p-3 shadow-sm shadow-zinc-200/60 backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/5 dark:bg-zinc-900/70 dark:shadow-black/30 lg:sticky lg:top-20 lg:z-30"
       :class="[
         isDragging ? 'opacity-0 pointer-events-none -translate-y-4 scale-[0.985]' : 'opacity-100 translate-y-0 scale-100',
         hasUnsyncedChanges ? 'ring-1 ring-amber-400/20 dark:ring-amber-300/15' : ''
@@ -401,7 +401,7 @@ onUnmounted(() => {
                 class="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-amber-700 dark:text-amber-200"
               >
                 <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                Not synced
+                Unsynced
               </span>
             </div>
           </div>
@@ -414,7 +414,7 @@ onUnmounted(() => {
             :disabled="isSyncDisabled"
           >
             <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
-            <span>{{ isLoading ? 'Working…' : uncertainWrite ? 'Check sync' : hasUnsyncedChanges ? 'Review sync' : 'Synced' }}</span>
+            <span>{{ uncertainWrite ? 'Verify sync' : hasUnsyncedChanges ? 'Review sync' : 'Synced' }}</span>
           </button>
         </div>
 
@@ -422,7 +422,6 @@ onUnmounted(() => {
           <Search class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
           <input
             v-model="searchQuery"
-            aria-label="Search addons"
             placeholder="Search addons..."
             class="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-8 pr-8 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
           />
@@ -442,7 +441,7 @@ onUnmounted(() => {
             type="button"
             @click="openAddModal"
             class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-            title="Add addon"
+            title="Add New Addon"
           >
             <Plus class="h-4 w-4" />
             <span>Add</span>
@@ -466,8 +465,8 @@ onUnmounted(() => {
               type="button"
               @click="backupConfig"
               class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
-              title="Download backup"
-              aria-label="Download backup"
+              title="Backup Configuration"
+              aria-label="Backup configuration"
             >
               <Download class="h-4 w-4" />
             </button>
@@ -475,8 +474,8 @@ onUnmounted(() => {
               type="button"
               @click="restoreConfig"
               class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
-              title="Restore backup"
-              aria-label="Restore backup"
+              title="Restore Configuration"
+              aria-label="Restore configuration"
             >
               <Upload class="h-4 w-4" />
             </button>
@@ -507,7 +506,6 @@ onUnmounted(() => {
           <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             v-model="searchQuery"
-            aria-label="Search addons"
             placeholder="Search addons..."
             class="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-9 pr-9 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
           />
@@ -527,10 +525,10 @@ onUnmounted(() => {
             type="button"
             @click="openAddModal"
             class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 lg:px-4"
-            title="Add addon"
+            title="Add New Addon"
           >
             <Plus class="h-4 w-4" />
-            <span>Add addon</span>
+            <span>Add Addon</span>
           </button>
 
           <div class="flex h-10 items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
@@ -551,8 +549,8 @@ onUnmounted(() => {
               type="button"
               @click="backupConfig"
               class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
-              title="Download backup"
-              aria-label="Download backup"
+              title="Backup Configuration"
+              aria-label="Backup configuration"
             >
               <Download class="h-4 w-4" />
             </button>
@@ -560,8 +558,8 @@ onUnmounted(() => {
               type="button"
               @click="restoreConfig"
               class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-blue-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
-              title="Restore backup"
-              aria-label="Restore backup"
+              title="Restore Configuration"
+              aria-label="Restore configuration"
             >
               <Upload class="h-4 w-4" />
             </button>
@@ -575,7 +573,7 @@ onUnmounted(() => {
             :disabled="isSyncDisabled"
           >
             <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
-            <span>{{ isLoading ? 'Working…' : uncertainWrite ? 'Check sync' : hasUnsyncedChanges ? 'Review sync' : 'Synced' }}</span>
+            <span>{{ uncertainWrite ? 'Verify sync' : hasUnsyncedChanges ? 'Review sync' : 'Synced' }}</span>
           </button>
         </div>
       </div>
@@ -598,20 +596,20 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div v-if="conflict" role="status" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">
+    <div v-if="conflict" role="status" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
       <p class="font-semibold">Your addons changed on another device.</p>
       <ul class="mt-2 space-y-1"><li v-for="(change, index) in conflict.changes" :key="index">{{ change.kind }}: {{ change.name }}</li></ul>
       <p v-if="conflict.conflicts?.length" class="mt-2">Edited in both places: {{ conflict.conflicts.join(', ') }}. Your changes are still here.</p>
-      <div class="mt-3 flex flex-wrap gap-2"><button type="button" class="min-h-10 rounded-lg border border-amber-300 px-3 py-2 dark:border-amber-700" @click="$emit('merge')">Combine changes</button><button type="button" class="min-h-10 rounded-lg border border-amber-300 px-3 py-2 dark:border-amber-700" @click="backupConfig">Back up my changes</button><button type="button" class="min-h-10 rounded-lg border border-amber-300 px-3 py-2 dark:border-amber-700" @click="$emit('reload')">Reload from Stremio</button></div>
+      <div class="mt-3 flex flex-wrap gap-3"><button type="button" class="rounded-lg border px-3 py-2" @click="$emit('merge')">Combine changes</button><button type="button" class="rounded-lg border px-3 py-2" @click="backupConfig">Back up my changes</button><button type="button" class="rounded-lg border px-3 py-2" @click="$emit('reload')">Reload from Stremio</button></div>
     </div>
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs leading-5 text-zinc-600 dark:text-zinc-400"><p>Backups may contain private addon links. Keep them safe.</p><button v-if="recovery" type="button" @click="backupRecovery" class="rounded-lg border border-zinc-300 px-3 py-2 font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">Download previous list</button></div>
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500"><p>Backups may contain private addon links. Keep them safe.</p><button v-if="recovery" type="button" @click="backupRecovery" class="rounded-lg border px-3 py-2 font-semibold">Download recovery backup</button></div>
     <div v-if="localAddons.length === 0" class="animate-fade-in-up rounded-3xl border border-zinc-200 bg-white/75 px-6 py-8 text-center shadow-sm dark:border-white/5 dark:bg-zinc-900/60">
       <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-500">
         <PackageOpen class="h-6 w-6" />
       </div>
       <h3 class="mb-2 text-lg font-semibold text-zinc-950 dark:text-white">No addons loaded</h3>
       <p class="mx-auto mb-5 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-        No addons here yet. Reload your Stremio list or add your first addon.
+        Your list is empty. Reload to import your current profile from Stremio, or add addons manually.
       </p>
       <div class="flex flex-col justify-center gap-2 sm:flex-row">
         <button type="button" @click="$emit('reload')" class="btn-primary h-10 rounded-xl px-4 text-sm" :disabled="isLoading">
@@ -635,7 +633,7 @@ onUnmounted(() => {
         chosen-class="sortable-chosen"
         drag-class="sortable-drag"
         fallback-class="sortable-fallback"
-        class="reorder-list flex flex-col gap-3 pb-8"
+        class="reorder-list flex flex-col gap-3 pb-20"
         :animation="220"
         easing="cubic-bezier(0.22, 1, 0.36, 1)"
         :swap-threshold="0.68"
@@ -664,7 +662,7 @@ onUnmounted(() => {
         </template>
       </Draggable>
 
-      <div v-else class="flex flex-col gap-3 pb-8">
+      <div v-else class="flex flex-col gap-3 pb-20">
          <AddonItem 
             v-for="(element, index) in displayedAddons"
             :key="element.__clientKey"
@@ -703,7 +701,7 @@ onUnmounted(() => {
     >
       <div class="space-y-3">
         <p class="text-sm text-zinc-600 dark:text-zinc-400">
-          Paste an addon link to get started.
+          Paste a manifest URL or Stremio install link.
         </p>
 
         <div class="relative">
@@ -714,17 +712,17 @@ onUnmounted(() => {
             spellcheck="false"
             autocomplete="off"
             :disabled="isAddingAddon"
-            aria-label="Addon link" class="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-9 pr-3 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
+            class="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 pl-9 pr-3 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:bg-zinc-950"
             @input="addAddonError = ''"
             @keyup.enter="installAddon"
           />
         </div>
 
         <p class="px-0.5 text-xs text-zinc-400 dark:text-zinc-500">
-          Supports <span class="font-medium text-zinc-500 dark:text-zinc-400">https://.../manifest.json</span> and <span class="font-medium text-zinc-500 dark:text-zinc-400">stremio://</span> links. We’ll check the addon before adding it.
+          Supports <span class="font-medium text-zinc-500 dark:text-zinc-400">https://.../manifest.json</span> and <span class="font-medium text-zinc-500 dark:text-zinc-400">stremio://</span> links. The manifest is fetched before adding.
         </p>
 
-        <a v-if="configureRequiredUrl" :href="configureRequiredUrl" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 underline dark:text-blue-400">Configure this addon</a>
+        <a v-if="configureRequiredUrl" :href="configureRequiredUrl" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 underline">Configure addon</a>
         <div
           v-if="addAddonError"
           class="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
@@ -757,7 +755,7 @@ onUnmounted(() => {
     <!-- Detailed Edit Modal -->
     <Modal
       :show="isEditModalOpen"
-      title="Edit addon"
+      title="Edit manifest"
       @close="handleEditModalCloseRequest"
       max-width="max-w-4xl"
       no-header

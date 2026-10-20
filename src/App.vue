@@ -172,8 +172,8 @@ onUnmounted(() => { window.removeEventListener('beforeunload', handleBeforeUnloa
         </div>
       </transition>
 
-      <div v-if="vaultError" role="alert" class="mx-4 mt-4 sm:mx-auto max-w-5xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{{ vaultError }}</div>
-      <div v-if="state.error" role="alert" class="mx-4 mt-4 sm:mx-auto flex max-w-5xl items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+      <div v-if="vaultError" role="alert" class="mx-auto mt-4 max-w-5xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{{ vaultError }}</div>
+      <div v-if="state.error" role="alert" class="mx-auto mt-4 flex max-w-5xl items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
         <span>{{ state.error }}</span><button type="button" aria-label="Dismiss error" @click="state.error = ''">Dismiss</button>
       </div>
       <LandingPage v-if="step === 1" :isLoading="isLoading" @login="login" @loginKey="loginKey" />
@@ -209,13 +209,13 @@ onUnmounted(() => { window.removeEventListener('beforeunload', handleBeforeUnloa
     />
 
     <Modal :show="reviewOpen" title="Review sync" @close="reviewOpen = false" max-width="max-w-xl">
-      <p class="mb-4 break-words text-sm">Syncing to: <strong>{{ currentUserEmail }}</strong></p>
+      <p class="mb-4 text-sm">Syncing to: <strong>{{ currentUserEmail }}</strong></p>
       <ul v-if="changes.length" class="mb-5 max-h-72 space-y-2 overflow-auto text-sm">
         <li v-for="(change, index) in changes" :key="index" class="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800"><strong>{{ change.kind }}</strong> {{ change.name }}<span v-if="change.position"> → position {{ change.position }}</span></li>
       </ul>
-      <p v-else class="mb-4 break-words text-sm">Check whether your previous sync reached Stremio.</p>
-      <p class="mb-5 text-xs leading-5 text-zinc-600 dark:text-zinc-400">We’ll check for changes and keep a backup before syncing. Avoid changing addons on another device while the sync is running.</p>
-      <div class="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end"><button class="min-h-11 rounded-xl border border-zinc-300 px-4 py-2 dark:border-zinc-700" @click="reviewOpen = false">Cancel</button><button class="btn-primary" :disabled="isLoading" @click="confirmSync">{{ state.uncertainWrite ? 'Check and sync' : 'Sync to Stremio' }}</button></div>
+      <p v-else class="mb-4 text-sm">Check whether your previous sync reached Stremio.</p>
+      <p class="mb-5 text-xs text-zinc-500">We’ll check for changes and keep a backup before syncing. Avoid changing addons on another device while the sync is running.</p>
+      <div class="flex justify-end gap-3"><button class="rounded-lg border px-4 py-2" @click="reviewOpen = false">Cancel</button><button class="btn-primary" :disabled="isLoading" @click="confirmSync">{{ state.uncertainWrite ? 'Check and sync' : 'Sync to Stremio' }}</button></div>
     </Modal>
     <Footer />
   </div>

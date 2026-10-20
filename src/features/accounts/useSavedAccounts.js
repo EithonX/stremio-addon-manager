@@ -3,7 +3,7 @@ import { normalizeKdfIterations } from '../../utils/cryptoVault.js'
 
 export const DEFAULT_SAVED_ACCOUNT = Object.freeze({
   email: '',
-  label: 'Choose a saved account',
+  label: '-- Select Saved Account --',
   authKey: '',
 })
 

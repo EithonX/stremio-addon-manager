@@ -20,7 +20,7 @@ const emit = defineEmits(['remove', 'edit', 'move'])
 
 const manifest = computed(() => props.addon.manifest || {})
 const isProtected = computed(() => props.addon.flags?.protected)
-const logo = computed(() => safeImageUrl(manifest.value.logo))
+const logo = computed(() => safeImageUrl(manifest.value.logo) || 'https://www.stremio.com/website/stremio-logo-small.png')
 const logoFailed = shallowRef(false)
 const copyState = shallowRef('')
 let copyTimer
@@ -80,7 +80,7 @@ watch(logo, () => {
     <div class="relative row-span-2 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-600 sm:h-12 sm:w-12">
       <span>{{ displayInitial }}</span>
       <img 
-        v-if="logo && !logoFailed"
+        v-if="!logoFailed"
         :src="logo" 
         class="absolute inset-0 h-full w-full object-contain bg-white p-1.5 dark:bg-zinc-950"
         loading="lazy"
@@ -89,9 +89,9 @@ watch(logo, () => {
       />
     </div>
 
-    <div class="min-w-0 flex-grow overflow-hidden sm:basis-0">
+    <div class="min-w-0 flex-grow overflow-hidden">
       <div class="flex min-w-0 items-center gap-2">
-        <h3 :title="manifest.name" class="min-w-0 line-clamp-2 break-words text-sm font-semibold text-zinc-950 dark:text-zinc-100 sm:line-clamp-none sm:truncate sm:text-base">
+        <h3 class="min-w-0 line-clamp-2 break-words text-sm font-semibold text-zinc-950 dark:text-zinc-100 sm:line-clamp-none sm:truncate sm:text-base">
           {{ manifest.name }}
         </h3>
         <span v-if="manifest.version" class="hidden shrink-0 rounded-full border border-zinc-200 bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-zinc-500 dark:border-white/10 dark:bg-zinc-800/80 dark:text-zinc-400 sm:inline-flex">
@@ -104,7 +104,7 @@ watch(logo, () => {
       </p>
 
       <div class="hidden items-center gap-2 sm:flex">
-        <span v-if="manifestDomain" class="truncate text-xs text-zinc-500 dark:text-zinc-400">
+        <span v-if="manifestDomain" class="truncate text-[11px] text-zinc-400 dark:text-zinc-500">
           {{ manifestDomain }}
         </span>
         <AddonFeatures :manifest="manifest" class="hidden lg:flex" />
@@ -117,8 +117,8 @@ watch(logo, () => {
         :href="configureUrl" 
         target="_blank"
         rel="noreferrer"
-        class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 dark:text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
-        title="Configure addon"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
+        title="Configure Addon"
         aria-label="Configure addon"
       >
         <ExternalLink class="h-4 w-4" />
@@ -127,20 +127,20 @@ watch(logo, () => {
       <button 
         type="button"
         @click="copyUrl"
-        class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 dark:text-zinc-400 transition-all hover:bg-white hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-        :title="copyState === 'copied' ? 'Link copied' : 'Copy addon link'"
-        aria-label="Copy addon link"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+        :title="copyState === 'copied' ? 'Link copied' : 'Copy Manifest URL'"
+        aria-label="Copy manifest URL"
       >
-        <Check v-if="copyState === 'copied'" class="h-4 w-4 text-emerald-600 dark:text-emerald-400" /><Copy v-else class="h-4 w-4" />
+        <Check v-if="copyState === 'copied'" class="h-4 w-4 text-emerald-500" /><Copy v-else class="h-4 w-4" />
       </button>
 
       <button 
         type="button"
         :disabled="isBusy"
         @click="$emit('edit')"
-        class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 dark:text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
-        title="Edit addon"
-        aria-label="Edit addon"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
+        title="Edit Manifest"
+        aria-label="Edit manifest"
       >
         <Settings class="h-4 w-4" />
       </button>
@@ -150,14 +150,14 @@ watch(logo, () => {
         type="button"
         :disabled="isBusy"
         @click="$emit('remove')"
-        class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 dark:text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
-        title="Remove addon"
+        class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+        title="Remove Addon"
         aria-label="Remove addon"
       >
         <Trash2 class="h-4 w-4" />
       </button>
       
-      <div v-else class="flex h-10 w-10 cursor-default items-center justify-center rounded-lg text-zinc-500 dark:text-zinc-400" title="Required by Stremio" aria-label="Required by Stremio">
+      <div v-else class="cursor-not-allowed rounded-lg p-1.5 text-zinc-300 dark:text-zinc-600" title="Protected System Addon" aria-label="Protected system addon">
         <ShieldCheck class="h-4 w-4" />
       </div>
     </div>

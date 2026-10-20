@@ -2,13 +2,13 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
-import { Move, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown, X, Layers, Eye, EyeOff } from '@lucide/vue'
+import { Move, Trash2, Home, Compass, Edit3, Code, RotateCcw, Save, Search, Grid, FileText, ChevronUp, ChevronDown, X, Layers, Eye, EyeOff } from '@lucide/vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { createEdgeDragScroll } from '../utils/edgeDragScroll'
 import ManifestJsonEditor from './editor/ManifestJsonEditor.vue'
 import { deepClone } from '../features/addons/addonCollection.js'
 import { validateManifest, stableSnapshot } from '../features/addons/manifestSchema.js'
-import { catalogIdentity, isSystemCatalog, createManifestDraft, defaultDraft, effectiveManifest, draftSupports, exportManifestDraft } from '../features/addons/manifestDraft.js'
+import { catalogIdentity, supportsSearch, isSystemCatalog, createManifestDraft, defaultDraft, effectiveManifest, draftSupports, exportManifestDraft } from '../features/addons/manifestDraft.js'
 import { fetchAddonManifest } from '../features/api/stremioApi'
 
 const props = defineProps({
@@ -232,6 +232,7 @@ function toggleOptimization(type) {
   const key = type === 'catalogs' ? 'home' : type
   settings.value[key] = !settings.value[key]
 }
+const hasSearchExtra = supportsSearch
 const hasSystemExtra = isSystemCatalog
 function isCatalogVisible(catalog) {
   return !settings.value.excluded.includes(catalogIdentity(catalog))
@@ -241,6 +242,11 @@ function toggleCatalogVisibility(catalog) {
   settings.value.excluded = isCatalogVisible(catalog)
     ? [...settings.value.excluded, key]
     : settings.value.excluded.filter(item => item !== key)
+}
+
+function deleteCatalog(index) {
+  const catalog = formModel.value.catalogs[index]
+  if (catalog) toggleCatalogVisibility(catalog)
 }
 
 function moveCatalog(index, direction) {
@@ -273,8 +279,8 @@ onUnmounted(() => {
 function handleReset() {
   confirmModal.value = {
     show: true,
-    title: 'Restore addon defaults?',
-    message: 'Load this addon’s original settings? This replaces your edits in this window.',
+    title: 'Reset to Default?',
+    message: 'Reset addon to original defaults? All unsaved changes will be lost.',
     confirmText: 'Reset',
     type: 'danger',
     action: executeReset
@@ -292,7 +298,7 @@ async function executeReset() {
     if (!data.id || !data.version) throw new Error('Invalid manifest response')
 
     if (resetAbort.signal.aborted) return
-    if (stableSnapshot({ form: formModel.value, settings: settings.value, json: jsonModel.value }) !== beforeReset) throw new Error('You made changes while the addon was loading. They’ve been kept. Try restoring again if you want to replace them.')
+    if (stableSnapshot({ form: formModel.value, settings: settings.value, json: jsonModel.value }) !== beforeReset) throw new Error('The editor changed during the request. Your newer edits have been kept; retry reset to replace them.')
     validateManifest(data)
     settings.value = defaultDraft(data).settings
     sanitizeBaseManifest.value = deepClone(data)
@@ -304,7 +310,7 @@ async function executeReset() {
     hasUnsavedChanges.value = true 
     
   } catch(e) {
-    if (!resetAbort.signal.aborted) editorError.value = 'Couldn’t restore addon defaults: ' + e.message
+    if (!resetAbort.signal.aborted) editorError.value = 'Could not load provider defaults: ' + e.message
   } finally {
     isResetting.value = false
   }
@@ -313,19 +319,53 @@ async function executeReset() {
 
 <template>
   <div class="flex flex-col">
-    <div class="sticky top-0 z-30 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 rounded-t-2xl border-b border-zinc-200 bg-white/95 px-4 py-3.5 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/95 sm:grid-cols-[minmax(0,1fr)_auto_auto] md:px-6">
+    <div class="sticky top-0 z-30 flex items-center justify-between gap-3 rounded-t-2xl border-b border-zinc-200/80 dark:border-white/5 bg-white/90 dark:bg-zinc-900/85 backdrop-blur-md px-4 md:px-6 py-3.5">
       <div class="min-w-0">
-        <h3 :title="formModel.name || 'Untitled addon'" class="truncate text-base font-semibold leading-tight text-zinc-900 dark:text-zinc-100 md:text-lg">{{ formModel.name || 'Untitled addon' }}</h3>
-        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p class="whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">Edit addon</p>
-          <span v-if="hasUnsavedChanges" class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"><span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>Unsaved</span>
+        <h3 class="truncate text-base md:text-lg font-semibold leading-tight text-zinc-900 dark:text-white">
+          {{ formModel.name || 'Untitled Addon' }}
+        </h3>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p class="whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-500">Edit manifest</p>
+          <span
+            v-if="hasUnsavedChanges"
+            class="inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+            Unsaved
+          </span>
         </div>
       </div>
-      <div class="col-span-2 row-start-2 flex w-fit items-center rounded-lg border border-zinc-200 bg-zinc-100 p-0.5 dark:border-zinc-700 dark:bg-zinc-950/50 sm:col-span-1 sm:col-start-2 sm:row-start-1">
-        <button type="button" @click="isAdvancedMode && toggleEditMode()" :aria-pressed="!isAdvancedMode" class="flex min-h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors" :class="!isAdvancedMode ? 'bg-white text-blue-700 shadow-sm dark:bg-zinc-800 dark:text-blue-300' : 'text-zinc-600 dark:text-zinc-400'"><Edit3 class="h-3.5 w-3.5" />Form</button>
-        <button type="button" @click="!isAdvancedMode && toggleEditMode()" :aria-pressed="isAdvancedMode" class="flex min-h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors" :class="isAdvancedMode ? 'bg-white text-blue-700 shadow-sm dark:bg-zinc-800 dark:text-blue-300' : 'text-zinc-600 dark:text-zinc-400'"><Code class="h-3.5 w-3.5" />JSON</button>
+
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- Segmented Form / JSON toggle -->
+        <div class="flex items-center rounded-lg border border-zinc-200 bg-zinc-100/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
+          <button
+            @click="isAdvancedMode && toggleEditMode()"
+            class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
+            :class="!isAdvancedMode ? 'bg-white text-blue-600 shadow-sm dark:bg-zinc-800 dark:text-blue-300' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'"
+          >
+            <Edit3 class="h-3.5 w-3.5" />
+            Form
+          </button>
+          <button
+            @click="!isAdvancedMode && toggleEditMode()"
+            class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
+            :class="isAdvancedMode ? 'bg-white text-blue-600 shadow-sm dark:bg-zinc-800 dark:text-blue-300' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'"
+          >
+            <Code class="h-3.5 w-3.5" />
+            JSON
+          </button>
+        </div>
+
+        <button
+          @click="requestCloseEditor"
+          class="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+          title="Close"
+          aria-label="Close editor"
+        >
+          <X class="h-5 w-5" />
+        </button>
       </div>
-      <button type="button" @click="requestCloseEditor" class="col-start-2 row-start-1 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 sm:col-start-3" title="Close editor" aria-label="Close editor"><X class="h-5 w-5" /></button>
     </div>
 
     <p v-if="editorError" role="alert" class="mx-4 mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{{ editorError }}</p>
@@ -336,31 +376,31 @@ async function executeReset() {
       <template v-if="!isAdvancedMode">
         <!-- Details -->
         <section class="rounded-2xl border border-zinc-200 bg-white/70 p-4 md:p-5 backdrop-blur-sm dark:border-white/5 dark:bg-zinc-900/40">
-          <h4 class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">Details</h4>
+          <h4 class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Details</h4>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="addon-name">Name</label>
-              <input id="addon-name" v-model="formModel.name" class="input-field" placeholder="Addon Name" />
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Name</label>
+              <input v-model="formModel.name" class="input-field" placeholder="Addon Name" />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="addon-description">Description</label>
-              <input id="addon-description" v-model="formModel.description" class="input-field" placeholder="Description" />
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Description</label>
+              <input v-model="formModel.description" class="input-field" placeholder="Description" />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="addon-logo">Logo URL</label>
-              <input id="addon-logo" v-model="formModel.logo" class="input-field" placeholder="https://..." />
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Logo URL</label>
+              <input v-model="formModel.logo" class="input-field" placeholder="https://..." />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400" for="addon-background">Background URL</label>
-              <input id="addon-background" v-model="formModel.background" class="input-field" placeholder="https://..." />
+              <label class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Background URL</label>
+              <input v-model="formModel.background" class="input-field" placeholder="https://..." />
             </div>
           </div>
         </section>
 
-        <!-- Show in Stremio & Optimization -->
+        <!-- Capabilities & Optimization -->
         <section class="rounded-2xl border border-zinc-200 bg-white/70 p-4 md:p-5 backdrop-blur-sm dark:border-white/5 dark:bg-zinc-900/40">
           <div class="mb-2.5">
-            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">Show in Stremio</h4>
+            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Capabilities</h4>
           </div>
 
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -376,21 +416,21 @@ async function executeReset() {
                 <Search class="h-3.5 w-3.5" />
               </div>
               <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Search</p>
-                <p class="text-xs leading-5 text-zinc-600 dark:text-zinc-400">{{ !canToggle('search') ? 'Not supported' : hasCapability('search') ? 'On' : 'Off' }}</p>
+                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Search Support</p>
+                <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{{ !canToggle('search') ? 'Not supported by this addon' : hasCapability('search') ? 'Included' : 'Disabled' }}</p>
               </div>
               <button
                 @click="toggleOptimization('search')"
                 :disabled="!canToggle('search')"
-                aria-label="Search"
-                class="relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                aria-label="Search support"
+                class="relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                 :class="hasCapability('search') ? 'bg-blue-600' : 'bg-zinc-300 dark:bg-zinc-700'"
                 role="switch"
                 :aria-checked="hasCapability('search')"
               >
                 <div
-                  class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                  :class="hasCapability('search') ? 'translate-x-5' : 'translate-x-0'"
+                  class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="hasCapability('search') ? 'translate-x-4' : 'translate-x-0'"
                 ></div>
               </button>
             </div>
@@ -407,21 +447,21 @@ async function executeReset() {
                 <Grid class="h-3.5 w-3.5" />
               </div>
               <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Home rows</p>
-                <p class="text-xs leading-5 text-zinc-600 dark:text-zinc-400">{{ !canToggle('catalogs') ? 'Not supported' : hasCapability('catalogs') ? 'On' : 'Hidden from Home' }}</p>
+                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Home Catalogs</p>
+                <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{{ !canToggle('catalogs') ? 'No home catalogs declared' : hasCapability('catalogs') ? 'Included' : 'Search and system catalogs only' }}</p>
               </div>
               <button
                 @click="toggleOptimization('catalogs')"
                 :disabled="!canToggle('catalogs')"
-                aria-label="Home rows"
-                class="relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                aria-label="Home catalogs"
+                class="relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                 :class="hasCapability('catalogs') ? 'bg-emerald-600' : 'bg-zinc-300 dark:bg-zinc-700'"
                 role="switch"
                 :aria-checked="hasCapability('catalogs')"
               >
                 <div
-                  class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                  :class="hasCapability('catalogs') ? 'translate-x-5' : 'translate-x-0'"
+                  class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="hasCapability('catalogs') ? 'translate-x-4' : 'translate-x-0'"
                 ></div>
               </button>
             </div>
@@ -438,28 +478,28 @@ async function executeReset() {
                 <FileText class="h-3.5 w-3.5" />
               </div>
               <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Title details</p>
-                <p class="text-xs leading-5 text-zinc-600 dark:text-zinc-400">{{ !canToggle('meta') ? 'Not supported' : hasCapability('meta') ? 'On' : 'Off' }}</p>
+                <p class="text-sm font-medium leading-tight text-zinc-900 dark:text-zinc-100">Metadata</p>
+                <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{{ !canToggle('meta') ? 'Not supported by this addon' : hasCapability('meta') ? 'Included' : 'Disabled' }}</p>
               </div>
               <button
                 @click="toggleOptimization('meta')"
                 :disabled="!canToggle('meta')"
-                aria-label="Title details"
-                class="relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                aria-label="Metadata"
+                class="relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/40"
                 :class="hasCapability('meta') ? 'bg-purple-600' : 'bg-zinc-300 dark:bg-zinc-700'"
                 role="switch"
                 :aria-checked="hasCapability('meta')"
               >
                 <div
-                  class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                  :class="hasCapability('meta') ? 'translate-x-5' : 'translate-x-0'"
+                  class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="hasCapability('meta') ? 'translate-x-4' : 'translate-x-0'"
                 ></div>
               </button>
             </div>
           </div>
         </section>
 
-        <p class="text-xs leading-5 text-zinc-600 dark:text-zinc-400">These settings affect this addon only. Remember your account or download a backup to keep the settings that let you turn hidden features back on.</p>
+        <p class="text-xs leading-relaxed text-zinc-500">Hidden features can be turned back on. Remember your account or download a backup to keep those settings.</p>
         <!-- Catalogs Editor -->
         <section class="space-y-3">
           <div class="flex items-center justify-between px-1">
@@ -469,10 +509,10 @@ async function executeReset() {
                 {{ formModel.catalogs.length }}
               </span>
             </div>
-            <span class="text-xs text-zinc-400 dark:text-zinc-500">Drag or use the arrows</span>
+            <span class="text-xs text-zinc-400 dark:text-zinc-500">Drag to reorder</span>
           </div>
 
-          <p class="px-1 text-xs leading-5 text-zinc-600 dark:text-zinc-400">Hide a catalog to remove it from Home, Discover and search. You can show it again anytime.</p>
+          <p class="px-1 text-xs text-zinc-500">Exclude removes a catalog from Home, Discover and search. Include restores its original settings.</p>
           <Draggable
             v-model="formModel.catalogs"
             item-key="__dragKey"
@@ -502,18 +542,71 @@ async function executeReset() {
             @unchoose="catalogEdgeDragScroll.stop(); isCatalogDragging = false"
           >
             <template #item="{ element, index }">
-              <div class="reorder-card grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900" :class="!isCatalogVisible(element) ? 'border-dashed' : ''">
-                <div class="drag-handle touch-none rounded-lg p-1 text-zinc-500 dark:text-zinc-400" aria-hidden="true"><Move class="h-4 w-4" /></div>
-                <div class="min-w-0">
-                  <input v-model="element.name" :aria-label="'Catalog name: ' + (element.id || index + 1)" class="w-full min-w-0 rounded-md bg-transparent px-1 py-1.5 text-sm font-medium text-zinc-900 outline-none focus:bg-zinc-100 dark:text-zinc-100 dark:focus:bg-zinc-800" :placeholder="element.id || 'Catalog name'" />
-                  <div class="mt-0.5 flex flex-wrap items-center gap-2 px-1 text-xs text-zinc-600 dark:text-zinc-400"><span>{{ element.type }}</span><span v-if="!isCatalogVisible(element)" class="rounded bg-zinc-100 px-1.5 py-0.5 font-medium dark:bg-zinc-800 dark:text-zinc-300">Hidden</span></div>
+              <div class="reorder-card group flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white/85 px-2 py-1.5 shadow-sm shadow-zinc-200/50 backdrop-blur-sm transition-all hover:border-blue-300 dark:border-white/5 dark:bg-zinc-900/60 dark:shadow-black/20 dark:hover:border-blue-500/40 sm:gap-2 sm:px-2.5">
+                <!-- Drag Handle -->
+                <div class="drag-handle shrink-0 touch-none cursor-grab rounded-lg p-1 text-zinc-300 transition-colors hover:bg-blue-50 hover:text-blue-500 active:cursor-grabbing dark:text-zinc-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-300" aria-hidden="true">
+                  <Move class="h-4 w-4" />
                 </div>
-                <div class="flex items-center gap-1.5">
-                  <button v-if="!hasSystemExtra(element)" type="button" @click="toggleCatalogVisibility(element)" class="flex h-10 w-10 items-center justify-center rounded-lg transition-colors" :class="isCatalogVisible(element) ? 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'" :title="(isCatalogVisible(element) ? 'Hide ' : 'Show ') + (element.name || element.id)" :aria-label="(isCatalogVisible(element) ? 'Hide ' : 'Show ') + (element.name || element.id)" :aria-pressed="isCatalogVisible(element)"><component :is="isCatalogVisible(element) ? Eye : EyeOff" class="h-4 w-4" /></button>
-                  <div class="flex flex-col rounded-lg border border-zinc-200 dark:border-zinc-700">
-                    <button type="button" @click="moveCatalog(index, -1)" :disabled="index === 0" class="flex h-7 w-8 items-center justify-center rounded-t-lg text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-zinc-800" title="Move catalog up" :aria-label="'Move ' + (element.name || element.id) + ' up'"><ChevronUp class="h-4 w-4" /></button>
-                    <button type="button" @click="moveCatalog(index, 1)" :disabled="index === formModel.catalogs.length - 1" class="flex h-7 w-8 items-center justify-center rounded-b-lg text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-zinc-800" title="Move catalog down" :aria-label="'Move ' + (element.name || element.id) + ' down'"><ChevronDown class="h-4 w-4" /></button>
-                  </div>
+
+                <!-- Visibility Toggle -->
+                <button
+                  v-if="!hasSystemExtra(element)"
+                  @click="toggleCatalogVisibility(element)"
+                  class="shrink-0 rounded-lg p-1.5 transition-colors"
+                  :class="isCatalogVisible(element) ? 'bg-blue-500/10 text-blue-500 ring-1 ring-inset ring-blue-500/20 dark:text-blue-300' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300'"
+                  :title="isCatalogVisible(element) ? 'Exclude from Home, Discover and search' : 'Include catalog again'"
+                  :aria-label="(isCatalogVisible(element) ? 'Exclude ' : 'Include ') + (element.name || element.id)"
+                  :aria-pressed="isCatalogVisible(element)"
+                >
+                  <component :is="isCatalogVisible(element) ? Eye : EyeOff" class="h-4 w-4" />
+                </button>
+                <div v-else class="h-7 w-7 shrink-0">
+                  <!-- Placeholder spacing -->
+                </div>
+
+                <!-- Name Input -->
+                <input
+                  v-model="element.name"
+                  class="min-w-0 flex-1 truncate rounded-md border-none bg-transparent px-1.5 py-1 text-sm font-medium text-zinc-900 placeholder-zinc-400 outline-none transition-colors focus:bg-zinc-100 focus:ring-0 dark:text-zinc-100 dark:focus:bg-zinc-800/60"
+                  placeholder="Catalog Name"
+                />
+
+                <!-- Type Chip -->
+                <span class="shrink-0 rounded-md bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium lowercase leading-none text-zinc-500 dark:bg-zinc-800/70 dark:text-zinc-400">
+                  {{ element.type }}
+                </span>
+
+                <!-- Delete (separate) -->
+                <button
+                  v-if="!hasSystemExtra(element) && !hasSearchExtra(element)"
+                  @click="deleteCatalog(index)"
+                  class="ml-1 shrink-0 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                  :title="isCatalogVisible(element) ? 'Exclude catalog' : 'Restore catalog'"
+                  :aria-label="(isCatalogVisible(element) ? 'Exclude catalog ' : 'Restore catalog ') + (element.name || element.id)"
+                >
+                  <component :is="isCatalogVisible(element) ? Trash2 : RotateCcw" class="h-4 w-4" />
+                </button>
+
+                <!-- Move up/down group -->
+                <div class="flex shrink-0 flex-col rounded-md border border-zinc-200 bg-zinc-50/80 dark:border-white/10 dark:bg-zinc-950/30">
+                  <button
+                    type="button"
+                    @click="moveCatalog(index, -1)"
+                    :disabled="index === 0"
+                    class="rounded-t-md px-1 py-0.5 text-zinc-400 transition-colors hover:text-blue-600 disabled:opacity-25 disabled:hover:text-zinc-400 dark:hover:text-blue-300"
+                    title="Move catalog up"
+                  >
+                    <ChevronUp class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    @click="moveCatalog(index, 1)"
+                    :disabled="index === formModel.catalogs.length - 1"
+                    class="rounded-b-md px-1 py-0.5 text-zinc-400 transition-colors hover:text-blue-600 disabled:opacity-25 disabled:hover:text-zinc-400 dark:hover:text-blue-300"
+                    title="Move catalog down"
+                  >
+                    <ChevronDown class="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
             </template>
@@ -527,7 +620,7 @@ async function executeReset() {
       </template>
 
       <template v-else>
-        <p class="mb-3 text-xs leading-5 text-zinc-600 dark:text-zinc-400">Edit the full addon settings below. Your display switches are applied when you save.</p>
+        <p class="mb-3 text-xs text-zinc-500">Source JSON retains disabled features. Capability settings are applied when saving; invalid changes leave the previous addon intact.</p>
         <ManifestJsonEditor v-model="jsonModel" />
       </template>
     </div>
@@ -538,11 +631,11 @@ async function executeReset() {
       <div class="flex w-full items-center gap-3 md:w-auto">
         <button
           @click="handleReset"
-          class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-zinc-800 md:w-auto"
+          class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800 md:w-auto"
           :disabled="isResetting"
         >
           <RotateCcw class="h-4 w-4" :class="{ 'animate-spin': isResetting }" />
-          {{ isResetting ? 'Resetting...' : 'Restore addon defaults' }}
+          {{ isResetting ? 'Resetting...' : 'Reset to Default' }}
         </button>
 
         <span
@@ -557,20 +650,20 @@ async function executeReset() {
       <div class="flex w-full gap-2.5 md:w-auto">
         <button
           @click="requestCloseEditor"
-          class="min-h-11 flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800 md:flex-none"
+          class="flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800 md:flex-none"
         >
           Cancel
         </button>
         <button
           @click="handleSubmit"
           :disabled="!hasUnsavedChanges"
-          class="flex min-h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-all active:scale-95 md:flex-none"
+          class="flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-all active:scale-95 md:flex-none"
           :class="hasUnsavedChanges
             ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20 hover:bg-blue-700'
             : 'cursor-not-allowed border border-zinc-200 bg-zinc-100 text-zinc-400 dark:border-white/5 dark:bg-zinc-800/50 dark:text-zinc-600'"
         >
           <Save class="hidden h-4 w-4 sm:block" />
-          Save changes
+          Save Changes
         </button>
       </div>
     </div>

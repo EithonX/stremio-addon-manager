@@ -40,8 +40,9 @@ export function createEdgeDragScroll(getTarget) {
   let lastClientY = null
 
   const updatePointer = (event) => {
-    if (typeof event.clientY === 'number') {
-      lastClientY = event.clientY
+    const pointer = event.touches?.[0] || event
+    if (typeof pointer.clientY === 'number') {
+      lastClientY = pointer.clientY
     }
   }
 
@@ -67,6 +68,8 @@ export function createEdgeDragScroll(getTarget) {
     if (active) return
     active = true
     document.addEventListener('dragover', updatePointer, { capture: true, passive: true })
+    document.addEventListener('pointermove', updatePointer, { capture: true, passive: true })
+    document.addEventListener('touchmove', updatePointer, { capture: true, passive: true })
     frameId = window.requestAnimationFrame(tick)
   }
 
@@ -74,6 +77,8 @@ export function createEdgeDragScroll(getTarget) {
     active = false
     lastClientY = null
     document.removeEventListener('dragover', updatePointer, { capture: true })
+    document.removeEventListener('pointermove', updatePointer, { capture: true })
+    document.removeEventListener('touchmove', updatePointer, { capture: true })
     if (frameId !== null) {
       window.cancelAnimationFrame(frameId)
       frameId = null

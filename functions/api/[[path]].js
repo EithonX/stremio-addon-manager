@@ -1,182 +1,72 @@
-import { validateManifestUrl } from '../../src/features/api/manifestUrlValidation.js'
+import { validateManifestUrl, trustedManifestOrigin } from '../../src/features/api/manifestUrlValidation.js'
+import { ApiError, readJsonLimited, requestDeadline } from '../../src/features/api/http.js'
+import { validateManifest, validateAddonCollection, requireConfiguredAddons } from '../../src/features/addons/manifestSchema.js'
 
-const STREMIO_API_BASE = 'https://api.strem.io/api'
-const STREMIO_POST_ROUTES = new Set([
-  '/api/login',
-  '/api/addonCollectionGet',
-  '/api/addonCollectionSet',
-])
-const JSON_HEADERS = {
-  'content-type': 'application/json; charset=utf-8',
-  'cache-control': 'no-store',
-}
-const MANIFEST_MAX_BYTES = 1024 * 1024
-const MANIFEST_TIMEOUT_MS = 10_000
-
-function jsonResponse(payload, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: JSON_HEADERS,
-  })
+const API = 'https://api.strem.io/api'
+const ROUTES = new Set(['login', 'getUser', 'logout', 'addonCollectionGet', 'addonCollectionSet', 'manifest'])
+const MAX_COLLECTION_BYTES = 4 * 1024 * 1024
+const HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' }
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: HEADERS })
+const failure = (message, status, code = '') => json({ error: { message, code } }, status)
+function requireString(value, name, maximum = 4096) {
+  if (typeof value !== 'string' || !value.trim() || value.length > maximum) throw new ApiError(`${name} is missing or invalid.`, { status: 400 })
+  return value
 }
 
-function errorResponse(message, status) {
-  return jsonResponse({ error: { message } }, status)
-}
-
-async function readJsonBody(request) {
-  const body = await request.text()
-
-  if (!body.trim()) {
-    return { ok: false, response: errorResponse('Request body is required.', 400) }
-  }
-
+export async function onRequest({ request, env = {} }) {
+  const url = new URL(request.url)
+  const route = url.pathname.slice('/api/'.length)
+  if (!url.pathname.startsWith('/api/') || !ROUTES.has(route)) return failure('Not found.', 404)
+  if (request.method !== 'POST') return new Response(JSON.stringify({ error: { message: 'Use POST with a JSON body.' } }), { status: 405, headers: { ...HEADERS, allow: 'POST' } })
+  const origin = request.headers.get('origin')
+  if (origin && origin !== url.origin || request.headers.get('sec-fetch-site') === 'cross-site') return failure('Cross-origin API requests are not allowed.', 403)
+  if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return failure('Use application/json.', 415)
   try {
-    JSON.parse(body)
-  } catch {
-    return { ok: false, response: errorResponse('Request body must be valid JSON.', 400) }
-  }
-
-  return { ok: true, body }
-}
-
-async function readJsonSafely(response) {
-  const text = await response.text()
-
-  if (!text) {
-    return null
-  }
-
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
-
-async function proxyStremioPost(request, pathname) {
-  if (request.method !== 'POST') {
-    return errorResponse('Method not allowed.', 405)
-  }
-
-  const bodyResult = await readJsonBody(request)
-  if (!bodyResult.ok) {
-    return bodyResult.response
-  }
-
-  try {
-    const upstream = await fetch(`${STREMIO_API_BASE}${pathname.slice('/api'.length)}`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: bodyResult.body,
-    })
-    const data = await readJsonSafely(upstream)
-
-    if (data === undefined) {
-      return errorResponse('Upstream returned invalid JSON.', 502)
+    if (env.API_RATE_LIMITER?.limit) {
+      const outcome = await env.API_RATE_LIMITER.limit({ key: request.headers.get('cf-connecting-ip') || 'unknown' })
+      if (!outcome.success) return failure('Too many requests. Try again shortly.', 429)
     }
-
-    return jsonResponse(data, upstream.status)
-  } catch (error) {
-    console.error(JSON.stringify({
-      message: 'stremio proxy failed',
-      error: error instanceof Error ? error.message : String(error),
-      path: pathname,
-    }))
-    return errorResponse('Failed to reach Stremio API.', 502)
-  }
-}
-
-async function readManifestText(response) {
-  const contentLength = response.headers.get('content-length')
-  if (contentLength && Number(contentLength) > MANIFEST_MAX_BYTES) {
-    return { ok: false, response: errorResponse('Manifest response is too large.', 413) }
-  }
-
-  const text = await response.text()
-  if (text.length > MANIFEST_MAX_BYTES) {
-    return { ok: false, response: errorResponse('Manifest response is too large.', 413) }
-  }
-
-  return { ok: true, text }
-}
-
-async function fetchManifest(requestUrl, request) {
-  if (request.method !== 'GET') {
-    return errorResponse('Method not allowed.', 405)
-  }
-
-  const validation = validateManifestUrl(requestUrl.searchParams.get('url'))
-  if (!validation.ok) {
-    return errorResponse(validation.message, 400)
-  }
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
-
-  try {
-    const upstream = await fetch(validation.url, {
-      headers: {
-        accept: 'application/json',
-        'cache-control': 'no-cache',
-      },
-      redirect: 'manual',
-      signal: controller.signal,
-    })
-
-    if (upstream.status >= 300 && upstream.status <= 399) {
-      return errorResponse('Manifest redirects are not allowed.', 400)
+    let body
+    try { body = await readJsonLimited(new Response(request.body, { headers: request.headers }), route === 'addonCollectionSet' ? MAX_COLLECTION_BYTES : 16384) }
+    catch (error) { if (error.kind === 'protocol') return failure('Request body must be valid JSON.', 400); throw error }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return failure('Request body must be an object.', 400)
+    if (route === 'manifest') {
+      const validated = validateManifestUrl(body.url)
+      if (!validated.ok) return failure(validated.message, 400)
+      // Trust is configured by the deployment, never granted by a caller's URL.
+      // DNS lookups followed by a separately-resolved fetch do not prevent rebinding.
+      if (!trustedManifestOrigin(validated.url, env.MANIFEST_PROXY_ORIGINS)) {
+        return failure('This provider does not allow direct browser access and is not enabled by this deployment’s manifest proxy policy.', 403, 'MANIFEST_ORIGIN_NOT_TRUSTED')
+      }
+      const deadline = requestDeadline(request.signal, 10000)
+      try {
+        const upstream = await fetch(validated.url, { headers: { accept: 'application/json' }, redirect: 'manual', signal: deadline.signal })
+        if (upstream.status >= 300 && upstream.status < 400) { await upstream.body?.cancel(); return failure('Manifest redirects are not allowed. Use the final manifest URL.', 400) }
+        if (!upstream.ok) { await upstream.body?.cancel(); return failure(`Provider returned HTTP ${upstream.status}.`, 502) }
+        return json(validateManifest(await readJsonLimited(upstream, 1024 * 1024)))
+      } finally { deadline.dispose() }
     }
-
-    if (!upstream.ok) {
-      return errorResponse(`Manifest request failed with HTTP ${upstream.status}.`, 502)
+    let payload
+    if (route === 'login') payload = { email: requireString(body.email, 'Email', 320), password: requireString(body.password, 'Password') }
+    else {
+      const authKey = requireString(body.authKey, 'AuthKey')
+      const type = { getUser: 'GetUser', logout: 'Logout', addonCollectionGet: 'AddonCollectionGet', addonCollectionSet: 'AddonCollectionSet' }[route]
+      payload = { type, authKey }
+      if (route === 'addonCollectionGet') payload.update = false
+      if (route === 'addonCollectionSet') payload.addons = requireConfiguredAddons(validateAddonCollection(body.addons))
     }
-
-    const textResult = await readManifestText(upstream)
-    if (!textResult.ok) {
-      return textResult.response
-    }
-
-    let manifest
+    const deadline = requestDeadline(request.signal, 12000)
     try {
-      manifest = JSON.parse(textResult.text)
-    } catch {
-      return errorResponse('Manifest response must be valid JSON.', 502)
-    }
-
-    if (!manifest?.id || !manifest?.version) {
-      return errorResponse('Manifest response is missing required id/version fields.', 502)
-    }
-
-    return jsonResponse(manifest)
+      const upstream = await fetch(`${API}/${route}`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(payload), redirect: 'manual', signal: deadline.signal })
+      if (upstream.status >= 300 && upstream.status < 400) { await upstream.body?.cancel(); return failure('Unexpected Stremio redirect.', 502) }
+      const data = await readJsonLimited(upstream, MAX_COLLECTION_BYTES)
+      return json(data, upstream.status)
+    } finally { deadline.dispose() }
   } catch (error) {
-    const message = error instanceof Error && error.name === 'AbortError'
-      ? 'Manifest request timed out.'
-      : 'Failed to fetch manifest.'
-
-    console.error(JSON.stringify({
-      message: 'manifest fetch failed',
-      error: error instanceof Error ? error.message : String(error),
-    }))
-    return errorResponse(message, 502)
-  } finally {
-    clearTimeout(timeout)
+    // Do not log exception text: fetch errors can contain secret-bearing URLs.
+    if (error.name === 'ValidationError') return failure(error.message, 400)
+    if (error instanceof ApiError) return failure(error.message, error.status || 502)
+    if (['AbortError', 'TimeoutError'].includes(error.name)) return failure('Upstream request timed out or was cancelled. Check the result before retrying a sync.', 504)
+    return failure('Could not reach the upstream service. Your local changes have been kept.', 502)
   }
-}
-
-export async function onRequest(context) {
-  const url = new URL(context.request.url)
-
-  if (STREMIO_POST_ROUTES.has(url.pathname)) {
-    return proxyStremioPost(context.request, url.pathname)
-  }
-
-  if (url.pathname === '/api/manifest') {
-    return fetchManifest(url, context.request)
-  }
-
-  return errorResponse('Not found.', 404)
 }

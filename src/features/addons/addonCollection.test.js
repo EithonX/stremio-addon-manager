@@ -6,9 +6,38 @@ import {
   hasManifestResource,
   normalizeAddonRecord,
   normalizeManifestUrl,
+  parseAddonBackup,
   removeManifestResource,
   restoreCatalogExtraBackups,
 } from './addonCollection.js'
+
+const backupFixture = () => ({ addons: [{
+  transportUrl: 'stremio://provider.example.com/config/manifest.json',
+  manifest: { id: 'fixture', version: '1.0.0', name: 'Fixture', types: ['movie'], resources: ['stream'] },
+  flags: { protected: false }, custom: { retained: true },
+}] })
+
+test('legacy backups remain importable without mutating their original data', () => {
+  const payload = backupFixture()
+  const before = JSON.stringify(payload)
+  const restored = parseAddonBackup(payload)
+  assert.equal(restored[0].transportUrl, 'https://provider.example.com/config/manifest.json')
+  assert.deepEqual(restored[0].custom, { retained: true })
+  assert.equal(JSON.stringify(payload), before)
+})
+
+test('backup validation rejects malformed field types before normalization can hide them', () => {
+  for (const corrupt of [
+    addon => { addon.manifest.name = 42 },
+    addon => { delete addon.manifest.name },
+    addon => { addon.manifest.description = 42 },
+    addon => { addon.flags = [] },
+  ]) {
+    const payload = backupFixture()
+    corrupt(payload.addons[0])
+    assert.throws(() => parseAddonBackup(payload), /addons\[0\]/)
+  }
+})
 
 test('normalizeManifestUrl serializes http(s) and stremio manifest URLs', () => {
   assert.equal(normalizeManifestUrl(' https://example.com/manifest.json '), 'https://example.com/manifest.json')
@@ -29,7 +58,7 @@ test('normalizeAddonRecord preserves unknown top-level fields while normalizing 
   assert.equal(normalized.installedAt, 123)
   assert.equal(normalized.transportUrl, 'https://example.com/manifest.json')
   assert.deepEqual(normalized.custom, { source: 'backup' })
-  assert.deepEqual(normalized.flags, { protected: true })
+  assert.deepEqual(normalized.flags, { official: false, protected: true })
 })
 
 test('hasManifestResource supports string and object resources', () => {

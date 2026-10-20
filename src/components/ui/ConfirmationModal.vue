@@ -1,5 +1,5 @@
 <script setup>
-import { AlertTriangle, Info } from 'lucide-vue-next'
+import { AlertTriangle, Info } from '@lucide/vue'
 import Modal from './Modal.vue'
 
 defineProps({

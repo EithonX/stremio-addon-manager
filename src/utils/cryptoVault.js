@@ -1,6 +1,7 @@
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
-export const PBKDF2_ITERATIONS = 310000
+export const PBKDF2_ITERATIONS = 600000
+export const MIN_VAULT_PASSPHRASE_LENGTH = 8
 
 function bytesToBase64(bytes) {
   let binary = ''
@@ -27,7 +28,7 @@ function bytesToHex(bytes) {
 
 export function normalizeKdfIterations(iterations) {
   const value = Number(iterations)
-  return Number.isSafeInteger(value) && value > 0 ? value : PBKDF2_ITERATIONS
+  return Number.isSafeInteger(value) && value >= 10000 && value <= 2000000 ? value : PBKDF2_ITERATIONS
 }
 
 async function deriveKey(pin, saltBytes, usages, iterations = PBKDF2_ITERATIONS) {
@@ -101,4 +102,24 @@ export async function hashAuthKey(authKey) {
   if (!authKey) return ''
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(authKey))
   return bytesToHex(new Uint8Array(digest))
+}
+
+export async function encryptSavedSession(authKey, passphrase, { editorStates = {}, recovery = null, allowLegacyPin = false } = {}) {
+  if (typeof passphrase !== 'string' || passphrase.length < (allowLegacyPin ? 4 : MIN_VAULT_PASSPHRASE_LENGTH)) {
+    throw new Error(`Use a vault passphrase of at least ${MIN_VAULT_PASSPHRASE_LENGTH} characters.`)
+  }
+  const encrypted = await encryptAuthKey(JSON.stringify({ version: 2, authKey, editorStates, recovery }), passphrase)
+  return { ...encrypted, vaultVersion: 2 }
+}
+
+export async function decryptSavedSession(account, passphrase) {
+  const plaintext = await decryptAuthKey(account, passphrase)
+  if (account.vaultVersion !== 2) return { authKey: plaintext, editorStates: {}, recovery: null }
+  const value = JSON.parse(plaintext)
+  if (value?.version !== 2 || typeof value.authKey !== 'string' || !value.authKey) throw new Error('Saved session is invalid.')
+  return {
+    authKey: value.authKey,
+    editorStates: value.editorStates && typeof value.editorStates === 'object' && !Array.isArray(value.editorStates) ? value.editorStates : {},
+    recovery: value.recovery && typeof value.recovery === 'object' ? value.recovery : null,
+  }
 }

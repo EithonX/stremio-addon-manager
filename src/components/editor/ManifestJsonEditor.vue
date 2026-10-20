@@ -1,7 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useClipboard } from '@vueuse/core'
-import { Copy, Check } from 'lucide-vue-next'
+import { Copy, Check } from '@lucide/vue'
 
 const model = defineModel({
   type: String,
@@ -9,17 +9,18 @@ const model = defineModel({
 })
 
 const editorWrapper = ref(null)
+const textareaRef = ref(null)
 const { copy, copied } = useClipboard()
 
 const lineCount = computed(() => model.value.split('\n').length)
 
 const highlightedLines = computed(() => tokenizeJsonLines(model.value))
 
-function handleInput(event) {
-  const textarea = event.target
+function handleInput() {
+  const textarea = textareaRef.value
   const wrapper = editorWrapper.value
 
-  if (!wrapper) {
+  if (!wrapper || !textarea) {
     return
   }
 
@@ -28,6 +29,8 @@ function handleInput(event) {
   wrapper.style.width = 'auto'
   wrapper.style.width = `${textarea.scrollWidth}px`
 }
+onMounted(() => nextTick(handleInput))
+watch(model, () => nextTick(handleInput))
 
 function getTokenClass(match) {
   if (/^"/.test(match)) {
@@ -105,6 +108,8 @@ function tokenizeJsonLine(line) {
 <template v-for="(line, lineIndex) in highlightedLines" :key="lineIndex"><span v-for="(token, tokenIndex) in line" :key="`${lineIndex}-${tokenIndex}`" :class="token.className">{{ token.text }}</span><br v-if="lineIndex < highlightedLines.length - 1" /></template></pre>
 
         <textarea
+          ref="textareaRef"
+          aria-label="Manifest source JSON"
           v-model="model"
           class="w-full h-full absolute inset-0 bg-transparent text-transparent caret-zinc-900 dark:caret-white p-4 outline-none resize-none z-10 whitespace-pre overflow-hidden"
           style="font-family: inherit;"
@@ -115,7 +120,9 @@ function tokenizeJsonLine(line) {
     </div>
 
     <button
-      @click="copy(model.value)"
+      @click="copy(model)"
+      type="button"
+      aria-label="Copy manifest JSON"
       class="absolute top-4 right-4 z-20 p-2 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors border border-zinc-200/50 dark:border-zinc-700/50"
       title="Copy JSON"
     >

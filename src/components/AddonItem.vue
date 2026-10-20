@@ -1,7 +1,8 @@
 <script setup>
 import { computed, shallowRef, watch } from 'vue'
-import { GripVertical, Trash2, ExternalLink, ShieldCheck, Copy, Settings } from 'lucide-vue-next'
+import { GripVertical, Trash2, ExternalLink, ShieldCheck, Copy, Settings } from '@lucide/vue'
 import AddonFeatures from './AddonFeatures.vue'
+import { safeImageUrl } from '../features/addons/manifestSchema.js'
 
 const props = defineProps({
   addon: {
@@ -11,14 +12,15 @@ const props = defineProps({
   isLocked: {
     type: Boolean,
     default: false
-  }
+  },
+  isBusy: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['remove', 'edit'])
+const emit = defineEmits(['remove', 'edit', 'move'])
 
 const manifest = computed(() => props.addon.manifest || {})
 const isProtected = computed(() => props.addon.flags?.protected)
-const logo = computed(() => manifest.value.logo || 'https://www.stremio.com/website/stremio-logo-small.png')
+const logo = computed(() => safeImageUrl(manifest.value.logo) || 'https://www.stremio.com/website/stremio-logo-small.png')
 const logoFailed = shallowRef(false)
 
 const displayInitial = computed(() => ((manifest.value.name || '').trim().charAt(0) || '?').toUpperCase())
@@ -33,8 +35,13 @@ const manifestDomain = computed(() => {
 })
 
 const configureUrl = computed(() => {
-  if (!props.addon.transportUrl) return '#'
-  return props.addon.transportUrl.replace('stremio://', 'https://').replace('/manifest.json', '/configure')
+  try {
+    const url = new URL(props.addon.transportUrl)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null
+    if (!/\/manifest\.json$/.test(url.pathname)) return null
+    url.pathname = url.pathname.replace(/\/manifest\.json$/, '/configure')
+    return url.href
+  } catch { return null }
 })
 
 const copyUrl = async () => {
@@ -51,18 +58,22 @@ watch(logo, () => {
 </script>
 
 <template>
-  <div class="reorder-card group relative flex flex-row items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white/85 p-2.5 shadow-sm shadow-zinc-200/70 backdrop-blur-sm transition-all hover:border-blue-300 hover:shadow-md hover:shadow-blue-500/5 dark:border-white/5 dark:bg-zinc-900/70 dark:shadow-black/20 dark:hover:border-blue-500/40 sm:gap-3 sm:p-3">
+  <div class="reorder-card group relative grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 rounded-2xl border border-zinc-200 bg-white/85 p-2.5 shadow-sm shadow-zinc-200/70 backdrop-blur-sm transition-all hover:border-blue-300 hover:shadow-md hover:shadow-blue-500/5 dark:border-white/5 dark:bg-zinc-900/70 dark:shadow-black/20 dark:hover:border-blue-500/40 sm:flex sm:flex-row sm:gap-3 sm:p-3">
     <div 
-      class="drag-handle -ml-1 touch-none self-center rounded-xl p-1.5 transition-colors sm:ml-0"
+      class="drag-handle row-span-2 -ml-1 touch-none self-center rounded-xl p-1.5 transition-colors sm:ml-0"
       role="button"
-      aria-label="Drag addon to reorder"
+      tabindex="0"
+      aria-label="Reorder addon: drag or use Arrow Up and Arrow Down"
+      aria-keyshortcuts="ArrowUp ArrowDown"
+      @keydown.up.prevent="!isLocked && !isBusy && emit('move', -1)"
+      @keydown.down.prevent="!isLocked && !isBusy && emit('move', 1)"
       :aria-disabled="isLocked"
       :class="isLocked ? 'cursor-not-allowed text-zinc-200 dark:text-zinc-800' : 'cursor-grab text-zinc-300 hover:bg-blue-50 hover:text-blue-500 active:cursor-grabbing dark:text-zinc-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-300'"
     >
       <GripVertical class="h-4 w-4 sm:h-5 sm:w-5" />
     </div>
 
-    <div class="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-600 sm:h-12 sm:w-12">
+    <div class="relative row-span-2 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-600 sm:h-12 sm:w-12">
       <span>{{ displayInitial }}</span>
       <img 
         v-if="!logoFailed"
@@ -76,10 +87,10 @@ watch(logo, () => {
 
     <div class="min-w-0 flex-grow overflow-hidden">
       <div class="flex min-w-0 items-center gap-2">
-        <h3 class="min-w-0 truncate text-sm font-semibold text-zinc-950 dark:text-zinc-100 sm:text-base">
+        <h3 class="min-w-0 line-clamp-2 break-words text-sm font-semibold text-zinc-950 dark:text-zinc-100 sm:line-clamp-none sm:truncate sm:text-base">
           {{ manifest.name }}
         </h3>
-        <span v-if="manifest.version" class="shrink-0 rounded-full border border-zinc-200 bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-zinc-500 dark:border-white/10 dark:bg-zinc-800/80 dark:text-zinc-400">
+        <span v-if="manifest.version" class="hidden shrink-0 rounded-full border border-zinc-200 bg-zinc-100/80 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-zinc-500 dark:border-white/10 dark:bg-zinc-800/80 dark:text-zinc-400 sm:inline-flex">
           v{{ manifest.version }}
         </span>
       </div>
@@ -96,9 +107,9 @@ watch(logo, () => {
       </div>
     </div>
 
-    <div class="flex shrink-0 items-center gap-0.5 self-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1 dark:border-white/10 dark:bg-zinc-950/45">
+    <div class="flex shrink-0 items-center justify-self-end gap-0.5 self-center rounded-xl border border-zinc-200 bg-zinc-50/80 p-1 dark:border-white/10 dark:bg-zinc-950/45">
       <a 
-        v-if="manifest.behaviorHints?.configurable"
+        v-if="manifest.behaviorHints?.configurable && configureUrl"
         :href="configureUrl" 
         target="_blank"
         rel="noreferrer"
@@ -121,6 +132,7 @@ watch(logo, () => {
 
       <button 
         type="button"
+        :disabled="isBusy"
         @click="$emit('edit')"
         class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-white hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-300"
         title="Edit Manifest"
@@ -132,6 +144,7 @@ watch(logo, () => {
       <button 
         v-if="!isProtected" 
         type="button"
+        :disabled="isBusy"
         @click="$emit('remove')"
         class="rounded-lg p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-300"
         title="Remove Addon"

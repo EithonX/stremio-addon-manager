@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stremio-addon-manager-2-0",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-10-20",
+
+  "vars": {
+    // Empty means manifests are fetched directly in the browser.
+    // Server fallback is enabled only for explicitly trusted origins.
+    "MANIFEST_PROXY_ORIGINS": ""
+  }
+}

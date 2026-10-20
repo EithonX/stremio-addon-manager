@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { User, LogOut, ChevronDown, Repeat } from 'lucide-vue-next'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { User, LogOut, ChevronDown, Repeat } from '@lucide/vue'
 
 const props = defineProps({
   email: {
@@ -13,8 +13,28 @@ const emit = defineEmits(['logout', 'switch-account'])
 
 const isOpen = ref(false)
 const menuRef = ref(null)
+const triggerRef = ref(null)
 
 const toggleMenu = () => isOpen.value = !isOpen.value
+function choose(action) {
+  isOpen.value = false
+  emit(action)
+}
+async function handleKeydown(event) {
+  if (event.key === 'Escape' && isOpen.value) {
+    isOpen.value = false
+    triggerRef.value?.focus()
+  }
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && menuRef.value?.contains(event.target)) {
+    event.preventDefault()
+    isOpen.value = true
+    await nextTick()
+    const items = [...menuRef.value.querySelectorAll('[role="menuitem"]')]
+    const index = items.indexOf(document.activeElement)
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : index < 0 ? event.key === 'ArrowDown' ? 0 : items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[next]?.focus()
+  }
+}
 
 const handleClickOutside = (event) => {
   if (menuRef.value && !menuRef.value.contains(event.target)) {
@@ -22,13 +42,18 @@ const handleClickOutside = (event) => {
   }
 }
 
-onMounted(() => document.addEventListener('click', handleClickOutside))
-onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+onMounted(() => { document.addEventListener('click', handleClickOutside); document.addEventListener('keydown', handleKeydown) })
+onUnmounted(() => { document.removeEventListener('click', handleClickOutside); document.removeEventListener('keydown', handleKeydown) })
 </script>
 
 <template>
-  <div class="relative" ref="menuRef">
+  <div class="relative" ref="menuRef" @focusout="!menuRef?.contains($event.relatedTarget) && (isOpen = false)">
     <button 
+      ref="triggerRef"
+      type="button"
+      aria-label="Account menu"
+      aria-haspopup="menu"
+      :aria-expanded="isOpen"
       @click="toggleMenu"
       class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group"
     >
@@ -48,6 +73,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
     >
       <div 
         v-if="isOpen" 
+        role="menu"
         class="absolute right-0 mt-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 py-1 z-50 origin-top-right"
       >
         <div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
@@ -56,7 +82,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
         </div>
 
         <button 
-          @click="$emit('switch-account')" 
+          type="button" role="menuitem"
+          @click="choose('switch-account')"
           class="w-full text-left px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-200 flex items-center gap-2 transition-colors"
         >
           <Repeat class="w-4 h-4" />
@@ -64,11 +91,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
         </button>
 
         <button 
-          @click="$emit('logout')" 
+          type="button" role="menuitem"
+          @click="choose('logout')"
           class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
         >
           <LogOut class="w-4 h-4" />
-          Log Out
+          Sign out &amp; revoke
         </button>
       </div>
     </transition>

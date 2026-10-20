@@ -1,5 +1,5 @@
 <script setup>
-import { Github, Heart } from 'lucide-vue-next'
+import { CodeXml, Heart } from '@lucide/vue'
 
 const appVersion = __APP_VERSION__
 const repoUrl = 'https://github.com/EithonX/stremio-addon-manager'
@@ -29,7 +29,7 @@ const repoUrl = 'https://github.com/EithonX/stremio-addon-manager'
           rel="noopener noreferrer"
           class="inline-flex items-center gap-1 font-medium text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
         >
-          <Github class="h-3.5 w-3.5" />
+          <CodeXml class="h-3.5 w-3.5" />
           Source
         </a>
       </p>

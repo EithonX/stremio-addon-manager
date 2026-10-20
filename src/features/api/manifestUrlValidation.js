@@ -1,103 +1,53 @@
-const PRIVATE_IPV4_RANGES = [
-  { first: 10, secondMin: 0, secondMax: 255 },
-  { first: 172, secondMin: 16, secondMax: 31 },
-  { first: 192, secondMin: 168, secondMax: 168 },
-  { first: 169, secondMin: 254, secondMax: 254 },
-]
-
-function parseIPv4(hostname) {
-  const parts = hostname.split('.')
-
-  if (parts.length !== 4) {
-    return null
-  }
-
-  const bytes = parts.map((part) => {
-    if (!/^\d{1,3}$/.test(part)) {
-      return null
-    }
-
-    const byte = Number(part)
-    return byte >= 0 && byte <= 255 ? byte : null
-  })
-
-  return bytes.every((byte) => byte !== null) ? bytes : null
+function blockedIPv4(host) {
+  const bytes = host.split('.').map(Number)
+  if (bytes.length !== 4 || bytes.some(v => !Number.isInteger(v) || v < 0 || v > 255)) return true
+  const [a, b, c] = bytes
+  return a === 0 || a === 10 || a === 127 || a >= 224 ||
+    a === 100 && b >= 64 && b <= 127 ||
+    a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 ||
+    a === 192 && (b === 168 || b === 0 || b === 2) ||
+    a === 198 && (b === 18 || b === 19 || b === 51 && c === 100) ||
+    a === 203 && b === 0 && c === 113
 }
-
-function normalizeHostname(hostname) {
-  return hostname.toLowerCase().replace(/^\[|\]$/g, '')
-}
-
-function isPrivateIPv4(bytes) {
-  if (bytes[0] === 0 || bytes[0] === 127) {
-    return true
-  }
-
-  return PRIVATE_IPV4_RANGES.some((range) => (
-    bytes[0] === range.first &&
-    bytes[1] >= range.secondMin &&
-    bytes[1] <= range.secondMax
-  ))
-}
-
-function isBlockedHostname(hostname) {
-  const normalized = normalizeHostname(hostname)
-
-  if (!normalized || normalized === 'localhost' || normalized.endsWith('.localhost')) {
-    return true
-  }
-
-  const ipv4 = parseIPv4(normalized)
-  if (ipv4) {
-    return isPrivateIPv4(ipv4)
-  }
-
-  if (
-    normalized === '::1' ||
-    normalized === '::' ||
-    normalized.startsWith('fc') ||
-    normalized.startsWith('fd') ||
-    normalized.startsWith('fe80:') ||
-    normalized.startsWith('::ffff:127.') ||
-    normalized.startsWith('::ffff:10.') ||
-    normalized.startsWith('::ffff:192.168.') ||
-    normalized.startsWith('::ffff:169.254.')
-  ) {
-    return true
-  }
-
-  const mapped172 = normalized.match(/^::ffff:172\.(\d{1,3})\./)
-  if (mapped172) {
-    const second = Number(mapped172[1])
-    return second >= 16 && second <= 31
-  }
-
-  return false
+function publicIPv6(host) {
+  const parts = host.split('::')
+  if (parts.length > 2) return false
+  const left = parts[0] ? parts[0].split(':') : []
+  const right = parts[1] ? parts[1].split(':') : []
+  const missing = 8 - left.length - right.length
+  if (missing < 0 || parts.length === 1 && missing !== 0 || parts.length === 2 && missing < 1) return false
+  const words = [...left, ...Array(parts.length === 2 ? missing : 0).fill('0'), ...right]
+  if (words.length !== 8 || words.some(p => !/^[0-9a-f]{1,4}$/.test(p))) return false
+  const [first, second] = words.map(p => parseInt(p, 16))
+  // Only ordinary global unicast literals. This rejects all mapped, loopback,
+  // unspecified, ULA, link-local, multicast and transition-address spellings.
+  return first >= 0x2000 && first <= 0x3fff && first !== 0x2002 &&
+    !(first === 0x2001 && (second < 0x200 || second === 0xdb8))
 }
 
 export function validateManifestUrl(rawUrl) {
-  if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
-    return { ok: false, message: 'Manifest URL is required.' }
-  }
-
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return { ok: false, message: 'Manifest URL is required.' }
   let parsed
-  try {
-    parsed = new URL(rawUrl)
-  } catch {
-    return { ok: false, message: 'Manifest URL is invalid.' }
-  }
+  try { parsed = new URL(rawUrl) } catch { return { ok: false, message: 'Manifest URL is invalid.' } }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return { ok: false, message: 'Manifest URL must use http or https.' }
+  if (parsed.username || parsed.password) return { ok: false, message: 'Manifest URL must not include embedded credentials.' }
+  if (parsed.port && !['80', '443'].includes(parsed.port)) return { ok: false, message: 'Manifest URLs must use a standard web port (80 or 443).' }
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
+  const blocked = !host || host.includes(':') ? !publicIPv6(host) :
+    /^\d+\.\d+\.\d+\.\d+$/.test(host) ? blockedIPv4(host) :
+      !host.includes('.') || /(?:^|\.)(?:localhost|local|internal|home|invalid|test)$/.test(host)
+  if (blocked) return { ok: false, message: 'Manifest URL must use a public web host.' }
+  if (!host.includes(':')) parsed.hostname = host
+  parsed.hash = ''
+  return { ok: true, url: parsed.href }
+}
 
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { ok: false, message: 'Manifest URL must use http or https.' }
-  }
-
-  if (parsed.username || parsed.password) {
-    return { ok: false, message: 'Manifest URL must not include credentials.' }
-  }
-
-  if (isBlockedHostname(parsed.hostname)) {
-    return { ok: false, message: 'Manifest URL host is not allowed.' }
-  }
-
-  return { ok: true, url: parsed.toString() }
+export function trustedManifestOrigin(url, configuredOrigins = '') {
+  const allowed = String(configuredOrigins).split(',').map(value => value.trim()).filter(Boolean)
+  return allowed.some(value => {
+    try {
+      const parsed = new URL(value)
+      return !parsed.username && !parsed.password && parsed.pathname === '/' && !parsed.search && !parsed.hash && parsed.origin === new URL(url).origin
+    } catch { return false }
+  })
 }

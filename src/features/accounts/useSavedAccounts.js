@@ -1,5 +1,5 @@
 import { useStorage } from '@vueuse/core'
-import { PBKDF2_ITERATIONS, normalizeKdfIterations } from '../../utils/cryptoVault'
+import { normalizeKdfIterations } from '../../utils/cryptoVault.js'
 
 export const DEFAULT_SAVED_ACCOUNT = Object.freeze({
   email: '',
@@ -17,7 +17,7 @@ function getSavedAccountsStore() {
   return savedAccountsRef
 }
 
-function normalizeSavedAccount(account) {
+export function normalizeSavedAccount(account) {
   if (!account || typeof account.email !== 'string' || !account.email.trim()) {
     return null
   }
@@ -29,6 +29,9 @@ function normalizeSavedAccount(account) {
     updatedAt: Number.isFinite(account.updatedAt) ? account.updatedAt : Date.now(),
     authKeyHash: typeof account.authKeyHash === 'string' ? account.authKeyHash : '',
     protected: Boolean(account.protected),
+    userId: typeof account.userId === 'string' ? account.userId : '',
+    origin: account.origin === 'password' ? 'password' : 'imported',
+    vaultVersion: account.vaultVersion === 2 ? 2 : 1,
   }
 
   if (
@@ -41,11 +44,13 @@ function normalizeSavedAccount(account) {
     normalized.authKeyIv = account.authKeyIv
     normalized.authKeySalt = account.authKeySalt
     normalized.authKeyKdfIterations = account.authKeyKdfIterations == null
-      ? PBKDF2_ITERATIONS
+      ? 310000 // Pre-v2 vaults used this cost when no metadata was present.
       : normalizeKdfIterations(account.authKeyKdfIterations)
-  } else if (typeof account.authKey === 'string' && account.authKey) {
-    normalized.authKey = account.authKey
+  } else {
+    // Migrate plaintext legacy credentials to metadata-only entries. Reconnect
+    // explicitly to save an encrypted replacement; never auto-reuse old keys.
     normalized.protected = false
+    normalized.needsReconnect = true
   }
 
   return normalized
@@ -64,8 +69,19 @@ function normalizeSavedAccounts(accounts) {
 export function useSavedAccounts() {
   const savedAccounts = getSavedAccountsStore()
 
+  function commit(accounts) {
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem('sam_saved_accounts', JSON.stringify(accounts)) }
+      catch { throw new Error('This browser could not save the encrypted account. Storage may be full or unavailable.') }
+    }
+    savedAccounts.value = accounts
+  }
+
   function ensureNormalized() {
-    savedAccounts.value = normalizeSavedAccounts(savedAccounts.value)
+    const removedPlaintext = Array.isArray(savedAccounts.value) && savedAccounts.value.some(account => account?.authKey || account?.password)
+    const normalized = normalizeSavedAccounts(savedAccounts.value)
+    try { commit(normalized); return { removedPlaintext, storageError: '' } }
+    catch (error) { savedAccounts.value = normalized; return { removedPlaintext, storageError: error.message } }
   }
 
   function findSavedAccountByEmail(email) {
@@ -81,7 +97,7 @@ export function useSavedAccounts() {
   function upsertSavedAccount(account) {
     const normalized = normalizeSavedAccount(account)
 
-    if (!normalized) {
+    if (!normalized || !normalized.protected) {
       return null
     }
 
@@ -97,7 +113,7 @@ export function useSavedAccounts() {
       nextAccounts.push(normalized)
     }
 
-    savedAccounts.value = nextAccounts
+    commit(nextAccounts)
     return normalized
   }
 
@@ -107,9 +123,9 @@ export function useSavedAccounts() {
     }
 
     const targetEmail = email.trim().toLowerCase()
-    savedAccounts.value = savedAccounts.value.filter(
+    commit(savedAccounts.value.filter(
       (account) => account.email.toLowerCase() !== targetEmail,
-    )
+    ))
   }
 
   function renameSavedAccount(email, nextLabel) {
@@ -120,7 +136,7 @@ export function useSavedAccounts() {
     const targetEmail = email.trim().toLowerCase()
     const label = typeof nextLabel === 'string' && nextLabel.trim() ? nextLabel.trim() : null
 
-    savedAccounts.value = savedAccounts.value.map((account) => {
+    commit(savedAccounts.value.map((account) => {
       if (account.email.toLowerCase() !== targetEmail) {
         return account
       }
@@ -130,7 +146,14 @@ export function useSavedAccounts() {
         label: label || account.email,
         updatedAt: Date.now(),
       }
-    })
+    }))
+  }
+
+  function invalidateSavedKey(authKeyHash) {
+    commit(savedAccounts.value.map(account => {
+      if (account.authKeyHash !== authKeyHash) return account
+      return { email: account.email, label: account.label, userId: account.userId, updatedAt: Date.now(), needsReconnect: true, protected: false }
+    }))
   }
 
   return {
@@ -141,5 +164,6 @@ export function useSavedAccounts() {
     upsertSavedAccount,
     removeSavedAccount,
     renameSavedAccount,
+    invalidateSavedKey,
   }
 }

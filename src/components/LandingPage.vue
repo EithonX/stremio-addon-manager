@@ -1,11 +1,11 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { ArrowRight, Loader2, Key, HelpCircle, Smartphone, Monitor, Shield, Copy, Check, AlertTriangle } from 'lucide-vue-next'
+import { ArrowRight, Loader2, Key, HelpCircle, Smartphone, Monitor, Shield, Copy, Check, AlertTriangle } from '@lucide/vue'
 import { useClipboard, useWindowSize } from '@vueuse/core'
 import SavedAccounts from './SavedAccounts.vue'
-import { decryptAuthKey } from '../utils/cryptoVault'
+import { decryptSavedSession } from '../utils/cryptoVault.js'
 
-defineProps({
+const props = defineProps({
   isLoading: {
     type: Boolean,
     default: false,
@@ -27,57 +27,85 @@ const copyToClipboard = (text) => {
 }
 
 const rememberMe = ref(false)
-const protectWithPin = ref(true)
 const rememberPin = ref('')
 const unlockPin = ref('')
 const protectedSelection = ref(null)
 const accountNotice = ref('')
 const accountNoticeType = ref('info')
+const isUnlocking = ref(false)
+const selectedAccount = ref(null)
+const unlockedVault = ref(null)
+const vaultPassphrase = ref('')
+let selectionVersion = 0
 
 const setAccountNotice = (message, type = 'info') => {
   accountNotice.value = message
   accountNoticeType.value = type
 }
 
-const trimmedPassword = computed(() => password.value.trim())
+const trimmedPassword = computed(() => password.value)
 const trimmedManualKey = computed(() => manualKey.value.trim())
 const shouldUseAuthKeyLogin = computed(() => trimmedManualKey.value.length > 0 && trimmedPassword.value.length === 0)
 
 const handleAccountSelect = (account) => {
+  selectionVersion++
+  isUnlocking.value = false
+  selectedAccount.value = account
+  unlockedVault.value = null
+  vaultPassphrase.value = ''
+  rememberMe.value = false
+  rememberPin.value = ''
   email.value = account.email || ''
   password.value = ''
   unlockPin.value = ''
   if (account?.protected && account?.authKeyEncrypted) {
     manualKey.value = ''
     protectedSelection.value = account
-    setAccountNotice('This saved account is PIN-protected. Enter its PIN to unlock the AuthKey.', 'info')
+    setAccountNotice('This saved account is encrypted. Enter its PIN or passphrase to unlock it.', 'info')
   } else {
-    manualKey.value = account.authKey || ''
+    manualKey.value = ''
     protectedSelection.value = null
-    accountNotice.value = ''
+    accountNotice.value = account.needsReconnect ? 'This legacy account no longer has a plaintext key saved. Sign in again to create an encrypted entry.' : ''
   }
 }
 
 const unlockSavedAuthKey = async () => {
-  if (!protectedSelection.value) return
-  if (!unlockPin.value) {
-    setAccountNotice('Enter your PIN to unlock this saved AuthKey.', 'error')
-    return
-  }
-
+  if (!protectedSelection.value || isUnlocking.value) return
+  if (!unlockPin.value) { setAccountNotice('Enter the saved account PIN or passphrase.', 'error'); return }
+  const account = protectedSelection.value
+  const run = selectionVersion
+  const passphrase = unlockPin.value
+  isUnlocking.value = true
   try {
-    manualKey.value = await decryptAuthKey(protectedSelection.value, unlockPin.value)
+    const vault = await decryptSavedSession(account, passphrase)
+    if (run !== selectionVersion) return
+    unlockedVault.value = vault
+    vaultPassphrase.value = passphrase
+    manualKey.value = vault.authKey
     protectedSelection.value = null
     unlockPin.value = ''
-    setAccountNotice('AuthKey unlocked for this session.', 'success')
+    setAccountNotice('Unlocked in this tab. Connect to verify the account with Stremio.', 'success')
   } catch {
-    setAccountNotice('Could not unlock AuthKey. Check PIN and try again.', 'error')
-  }
+    if (run === selectionVersion) setAccountNotice('Could not unlock this account. Check its PIN or passphrase.', 'error')
+  } finally { if (run === selectionVersion) isUnlocking.value = false }
 }
+watch(manualKey, value => {
+  if (value.trim() && protectedSelection.value) {
+    protectedSelection.value = null
+    selectedAccount.value = null
+    unlockPin.value = ''
+    accountNotice.value = ''
+  }
+  if (unlockedVault.value && value.trim() !== unlockedVault.value.authKey) {
+    unlockedVault.value = null
+    vaultPassphrase.value = ''
+  }
+})
 
 const handleLogin = () => {
-  if (rememberMe.value && protectWithPin.value && rememberPin.value.length < 4) {
-    setAccountNotice('PIN must be at least 4 characters before enabling protected Remember Me.', 'error')
+  if (props.isLoading || isUnlocking.value) return
+  if (rememberMe.value && rememberPin.value.length < 8) {
+    setAccountNotice('Use a vault passphrase of at least 8 characters to remember this account.', 'error')
     return
   }
 
@@ -94,7 +122,15 @@ const handleLogin = () => {
   }
 
   if (shouldUseAuthKeyLogin.value) {
-    emit('loginKey', trimmedManualKey.value)
+    emit('loginKey', {
+      authKey: trimmedManualKey.value,
+      origin: unlockedVault.value ? selectedAccount.value?.origin : 'imported',
+      expectedUserId: unlockedVault.value ? selectedAccount.value?.userId : '',
+      editorStates: unlockedVault.value?.editorStates || {},
+      recovery: unlockedVault.value?.recovery || null,
+      vaultPassphrase: vaultPassphrase.value,
+      rememberMe: rememberMe.value, rememberPin: rememberPin.value,
+    })
     return
   }
 
@@ -107,8 +143,7 @@ const handleLogin = () => {
     email: email.value,
     password: password.value,
     rememberMe: rememberMe.value,
-    protectWithPin: rememberMe.value ? protectWithPin.value : false,
-    rememberPin: rememberMe.value && protectWithPin.value ? rememberPin.value : ''
+    rememberPin: rememberMe.value ? rememberPin.value : ''
   })
 }
 
@@ -154,11 +189,11 @@ watch(width, (value) => {
           <SavedAccounts @selected="handleAccountSelect" />
 
           <div v-if="protectedSelection" class="space-y-2 p-3 rounded-lg bg-blue-50 dark:bg-zinc-900/50 border border-blue-200 dark:border-zinc-800">
-            <label class="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Unlock Saved AuthKey</label>
+            <label class="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Unlock saved account</label>
             <div class="flex gap-2">
-              <input v-model="unlockPin" type="password" class="input-field h-10" placeholder="Enter PIN" @keyup.enter="unlockSavedAuthKey" />
-              <button type="button" @click="unlockSavedAuthKey" class="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
-                Unlock
+              <input v-model="unlockPin" type="password" class="input-field h-10" placeholder="PIN or passphrase" autocomplete="off" aria-label="Saved account PIN or passphrase" @keydown.enter.prevent.stop="unlockSavedAuthKey" />
+              <button type="button" :disabled="isUnlocking || isLoading" @click="unlockSavedAuthKey" class="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
+                {{ isUnlocking ? 'Unlocking…' : 'Unlock' }}
               </button>
             </div>
           </div>
@@ -168,54 +203,28 @@ watch(width, (value) => {
           </p>
 
           <div class="space-y-1.5">
-            <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Email</label>
-            <input v-model="email" type="email" class="input-field" placeholder="name@example.com" :required="!shouldUseAuthKeyLogin" />
+            <label for="account-email" class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Email</label>
+            <input id="account-email" autocomplete="username" v-model="email" type="email" class="input-field" placeholder="name@example.com" :required="!shouldUseAuthKeyLogin" />
           </div>
 
           <div class="space-y-1.5">
-            <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Password</label>
-            <input v-model="password" type="password" class="input-field" placeholder="••••••••" />
+            <label for="account-password" class="text-xs font-bold text-zinc-500 uppercase tracking-wider">Password</label>
+            <input id="account-password" autocomplete="current-password" v-model="password" type="password" class="input-field" placeholder="••••••••" />
           </div>
           
-          <label class="flex items-center gap-2.5 cursor-pointer group w-fit select-none">
-            <div
-              class="relative w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center"
-              :class="rememberMe
-                ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500'
-                : 'bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 group-hover:border-blue-400 dark:group-hover:border-blue-700'"
-            >
-              <input type="checkbox" v-model="rememberMe" class="hidden" />
-              <Check v-if="rememberMe" class="w-3.5 h-3.5 text-white stroke-[3px]" />
-            </div>
-            <span class="text-sm font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors">
-              Remember me
-            </span>
+          <label class="flex w-fit cursor-pointer items-center gap-2.5 text-sm">
+            <input type="checkbox" v-model="rememberMe" class="h-4 w-4 accent-blue-600" />
+            <span>Remember this account with encryption</span>
           </label>
-
-          <div v-if="rememberMe" class="space-y-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40">
-            <label class="flex items-center gap-2.5 cursor-pointer group w-fit select-none">
-              <div
-                class="relative w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center"
-                :class="protectWithPin
-                  ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500'
-                  : 'bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 group-hover:border-blue-400 dark:group-hover:border-blue-700'"
-              >
-                <input type="checkbox" v-model="protectWithPin" class="hidden" />
-                <Check v-if="protectWithPin" class="w-3.5 h-3.5 text-white stroke-[3px]" />
-              </div>
-              <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Protect remembered AuthKey with PIN (Recommended)</span>
-            </label>
-
-            <div v-if="protectWithPin" class="space-y-1.5">
-              <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider">PIN</label>
-              <input v-model="rememberPin" type="password" minlength="4" class="input-field h-10" placeholder="At least 4 characters" />
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">PIN stays local and is required later to unlock this AuthKey.</p>
-            </div>
+          <div v-if="rememberMe" class="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <label for="vault-passphrase" class="text-xs font-bold text-zinc-500">Vault passphrase</label>
+            <input id="vault-passphrase" v-model="rememberPin" type="password" minlength="8" autocomplete="new-password" class="input-field" placeholder="At least 8 characters" />
+            <p class="text-xs text-zinc-500">Required to unlock the saved account and customization data after closing. Choose a long passphrase.</p>
           </div>
 
           <button type="submit" :disabled="isLoading" class="btn-primary w-full mt-2">
             <Loader2 v-if="isLoading" class="w-5 h-5 animate-spin" />
-            <span v-else>{{ shouldUseAuthKeyLogin ? 'Connect with Saved AuthKey' : 'Connect Account' }}</span>
+            <span v-else>{{ shouldUseAuthKeyLogin ? 'Connect with AuthKey' : 'Connect Account' }}</span>
           </button>
         </form>
 
@@ -226,15 +235,15 @@ watch(width, (value) => {
         </div>
 
         <div class="flex gap-2">
-          <input v-model="manualKey" type="password" placeholder="Paste AuthKey..." class="input-field" @keyup.enter="handleLogin" />
-          <button type="button" @click="handleLogin" class="h-12 px-6 rounded-lg bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 text-white font-bold transition-colors">
+          <input v-model="manualKey" type="password" placeholder="Paste AuthKey..." aria-label="Stremio AuthKey" autocomplete="off" class="input-field" @keydown.enter.prevent="handleLogin" />
+          <button type="button" :disabled="isLoading || isUnlocking" @click="handleLogin" class="h-12 px-6 rounded-lg bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-700 text-white font-bold transition-colors">
             Go
           </button>
         </div>
 
         <div class="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-xs leading-relaxed">
           <Shield class="w-4 h-4 mt-0.5 shrink-0" />
-          <p><strong>Security:</strong> Password is never stored. AuthKey can be stored with optional PIN encryption.</p>
+          <p><strong>Security:</strong> Active keys stay in this tab. Remembered accounts are encrypted. Login requests pass through this deployment to Stremio.</p>
         </div>
 
       </section>

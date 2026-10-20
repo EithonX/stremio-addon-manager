@@ -1,6 +1,6 @@
 <script setup>
-import { shallowRef, computed, onMounted, onUnmounted, useTemplateRef } from 'vue'
-import { ChevronDown, Edit2, Trash2, Check, Lock } from 'lucide-vue-next'
+import { shallowRef, computed, nextTick, watch, onMounted, onUnmounted, useTemplateRef } from 'vue'
+import { ChevronDown, Edit2, Trash2, Check, Lock } from '@lucide/vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { useSavedAccounts } from '../features/accounts/useSavedAccounts'
 
@@ -18,8 +18,11 @@ const DEFAULT_EMAIL = defaultSavedAccount.email
 const selectedEmail = shallowRef(DEFAULT_EMAIL)
 const isEditing = shallowRef(false)
 const editLabel = shallowRef('')
+const accountError = shallowRef('')
+const editInput = useTemplateRef('editInput')
 const isDropdownOpen = shallowRef(false)
 const dropdownRef = useTemplateRef('dropdownRef')
+const triggerRef = useTemplateRef('accountTrigger')
 
 // Confirmation Modal State
 const showConfirm = shallowRef(false)
@@ -50,6 +53,7 @@ function selectAccount(email) {
   const account = savedAccounts.value.find(a => a.email === email) || { ...defaultSavedAccount }
   emit('selected', account)
   isDropdownOpen.value = false
+  triggerRef.value?.focus()
 }
 
 function confirmRemove() {
@@ -58,22 +62,26 @@ function confirmRemove() {
 }
 
 function handleRemoveConfirm() {
-  removeSavedAccount(selectedEmail.value)
-  selectedEmail.value = DEFAULT_EMAIL
-  emit('selected', { ...defaultSavedAccount })
+  try {
+    removeSavedAccount(selectedEmail.value)
+    selectedEmail.value = DEFAULT_EMAIL
+    emit('selected', { ...defaultSavedAccount })
+    accountError.value = ''
+  } catch (error) { accountError.value = error.message }
   showConfirm.value = false
 }
 
-function startRename() {
+async function startRename() {
   if (!selectedAccount.value) return
   editLabel.value = selectedAccount.value.label
   isEditing.value = true
+  await nextTick(); editInput.value?.focus()
 }
 
 function saveRename() {
   if (!selectedAccount.value) return
-  renameSavedAccount(selectedEmail.value, editLabel.value)
-  isEditing.value = false
+  try { renameSavedAccount(selectedEmail.value, editLabel.value); isEditing.value = false; accountError.value = '' }
+  catch (error) { accountError.value = error.message }
 }
 
 // Click Outside
@@ -83,11 +91,24 @@ function handleClickOutside(event) {
   }
 }
 
-function handleKeydown(event) {
-  if (event.key === 'Escape') {
-    isDropdownOpen.value = false
+async function handleKeydown(event) {
+  if (!dropdownRef.value?.contains(event.target)) return
+  if (event.key === 'Escape' && isDropdownOpen.value) {
+    event.preventDefault(); event.stopPropagation(); isDropdownOpen.value = false; triggerRef.value?.focus()
+  }
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault()
+    isDropdownOpen.value = true
+    await nextTick()
+    const choices = [...dropdownRef.value.querySelectorAll('[role="option"]')]
+    const index = choices.indexOf(document.activeElement)
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : index < 0 ? event.key === 'ArrowDown' ? 0 : choices.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length
+    choices[next]?.focus()
   }
 }
+watch(savedAccounts, () => {
+  if (selectedEmail.value && !selectedAccount.value) selectAccount(DEFAULT_EMAIL)
+}, { deep: true })
 
 onMounted(() => {
   ensureNormalized()
@@ -111,6 +132,7 @@ onUnmounted(() => {
       <!-- Custom Dropdown -->
       <div ref="dropdownRef" class="relative flex-grow min-w-0">
         <button 
+          ref="accountTrigger"
           @click="isDropdownOpen = !isDropdownOpen"
           type="button"
           aria-haspopup="listbox"
@@ -142,6 +164,7 @@ onUnmounted(() => {
              <button
                 @click="selectAccount(DEFAULT_EMAIL)"
                 type="button"
+                tabindex="-1"
                 role="option"
                 :aria-selected="selectedEmail === DEFAULT_EMAIL"
                 class="flex min-h-10 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
@@ -157,6 +180,7 @@ onUnmounted(() => {
                 :key="acc.email" 
                 @click="selectAccount(acc.email)"
                 type="button"
+                tabindex="-1"
                 role="option"
                 :aria-selected="selectedEmail === acc.email"
                 class="flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
@@ -202,6 +226,7 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <p v-if="accountError" role="alert" class="text-sm text-red-600">{{ accountError }}</p>
     <!-- Edit Label Modal/Input (Inline for simplicity) -->
     <div v-if="isEditing" class="mt-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-2.5 dark:border-white/10 dark:bg-zinc-950/40">
       <input 

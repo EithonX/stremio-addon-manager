@@ -1,3 +1,4 @@
+import { validateAddonCollection } from './manifestSchema.js'
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 
 function isPlainObject(value) {
@@ -126,17 +127,18 @@ export function normalizeManifestUrl(rawUrl) {
 
   let normalized = rawUrl.trim()
 
-  if (normalized.startsWith('stremio://')) {
+  if (/^stremio:\/\//i.test(normalized)) {
     normalized = `https://${normalized.slice('stremio://'.length)}`
   }
 
   try {
     const parsed = new URL(normalized)
 
-    if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+    if (!ALLOWED_PROTOCOLS.has(parsed.protocol) || parsed.username || parsed.password) {
       return ''
     }
 
+    parsed.hash = ''
     return parsed.toString()
   } catch {
     return ''
@@ -151,7 +153,7 @@ export function normalizeAddonRecord(addon) {
   const transportUrl = normalizeManifestUrl(addon.transportUrl)
   const manifest = isPlainObject(addon.manifest) ? addon.manifest : null
 
-  if (!transportUrl || !manifest || !manifest.id || !manifest.version) {
+  if (!transportUrl || !manifest || typeof manifest.id !== 'string' || !manifest.id.trim() || typeof manifest.version !== 'string' || !manifest.version.trim()) {
     return null
   }
 
@@ -167,16 +169,31 @@ export function normalizeAddonRecord(addon) {
       description:
         typeof manifest.description === 'string' ? manifest.description : '',
     },
-    flags: isPlainObject(addon.flags) ? { ...addon.flags } : {},
+    flags: { official: false, protected: false, ...(isPlainObject(addon.flags) ? addon.flags : {}) },
   }
 }
 
 export function normalizeAddonCollection(addons) {
   if (!Array.isArray(addons)) {
-    return []
+    throw new Error('Addon collection must be an array.')
   }
 
-  return addons.map(normalizeAddonRecord).filter(Boolean)
+  return addons.map((addon, index) => {
+    const normalized = normalizeAddonRecord(addon)
+    if (!normalized) throw new Error(`addons[${index}]: invalid descriptor. No entries were discarded.`)
+    return normalized
+  })
+}
+
+export function validateAndNormalizeAddonCollection(addons) {
+  if (!Array.isArray(addons)) throw new Error('Addon collection must be an array.')
+  // Canonicalize transport syntax without coercing malformed descriptor fields
+  // into valid-looking defaults. Validation must see the original field types.
+  const canonical = deepClone(addons).map(addon => isPlainObject(addon)
+    ? { ...addon, transportUrl: normalizeManifestUrl(addon.transportUrl) }
+    : addon)
+  validateAddonCollection(canonical)
+  return normalizeAddonCollection(canonical)
 }
 
 export function parseAddonBackup(payload) {
@@ -184,11 +201,5 @@ export function parseAddonBackup(payload) {
     throw new Error('Invalid backup file format.')
   }
 
-  const normalizedAddons = normalizeAddonCollection(payload.addons)
-
-  if (normalizedAddons.length !== payload.addons.length) {
-    throw new Error('Backup contains one or more invalid addon entries.')
-  }
-
-  return normalizedAddons
+  return validateAndNormalizeAddonCollection(payload.addons)
 }

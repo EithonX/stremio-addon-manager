@@ -4,7 +4,7 @@ import ThemeToggle from './ThemeToggle.vue'
 import ProfileMenu from './ui/ProfileMenu.vue'
 
 defineProps(['isLoggedIn', 'userEmail'])
-defineEmits(['logout'])
+defineEmits(['logout', 'switch-account'])
 
 const appVersion = __APP_VERSION__
 </script>
@@ -13,20 +13,20 @@ const appVersion = __APP_VERSION__
   <nav class="sticky top-0 z-50 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl">
     <div class="max-w-6xl mx-auto px-4 sm:px-8 h-16 md:h-20 flex items-center justify-between">
       
-      <div class="flex items-center gap-3">
+      <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <AppLogo class="h-9 w-9 md:h-10 md:w-10 shadow-lg shadow-blue-600/20 rounded-[11px]" />
-        <div>
-          <h1 class="font-bold text-lg md:text-xl leading-none tracking-tight text-zinc-900 dark:text-zinc-100">Stremio Addon Manager</h1>
+        <div class="min-w-0">
+          <h1 title="Stremio Addon Manager" class="truncate font-bold text-sm sm:text-lg md:text-xl leading-none tracking-tight text-zinc-900 dark:text-zinc-100">Stremio Addon Manager</h1>
           <p class="text-[10px] md:text-xs font-bold text-zinc-500 mt-1">v{{ appVersion }} by EithonX</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex shrink-0 items-center gap-1 sm:gap-3">
         <ProfileMenu 
           v-if="isLoggedIn" 
           :email="userEmail"
           @logout="$emit('logout')" 
-          @switch-account="$emit('logout')"
+          @switch-account="$emit('switch-account')"
         />
         <div class="h-6 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
         <ThemeToggle />

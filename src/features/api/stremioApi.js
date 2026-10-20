@@ -1,70 +1,30 @@
-const API_BASE = '/api'
+import { fetchJson } from './http.js'
+import { validateManifestUrl } from './manifestUrlValidation.js'
+import { validateManifest } from '../addons/manifestSchema.js'
 
-async function parseJsonResponse(response) {
-  const text = await response.text()
-
-  if (!text) {
-    return null
-  }
-
-  try {
-    return JSON.parse(text)
-  } catch {
-    throw new Error('Server returned invalid JSON.')
-  }
-}
-
-function getApiErrorMessage(data, fallback) {
-  return data?.error?.message || fallback
-}
-
-export async function postStremioApi(endpoint, payload) {
-  const response = await fetch(`${API_BASE}/${endpoint}`, {
+export function postStremioApi(endpoint, payload, options = {}) {
+  return fetchJson(`/api/${endpoint}`, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-    },
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify(payload),
-  })
-  const data = await parseJsonResponse(response)
+  }, options)
+}
+export const loginToStremio = (email, password, options) => postStremioApi('login', { email, password }, options)
+export const getStremioUser = (authKey, options) => postStremioApi('getUser', { type: 'GetUser', authKey }, options)
+export const logoutFromStremio = (authKey, options) => postStremioApi('logout', { type: 'Logout', authKey }, options)
+export const getAddonCollection = (authKey, options) => postStremioApi('addonCollectionGet', { type: 'AddonCollectionGet', authKey, update: false }, options)
+export const setAddonCollection = (authKey, addons, options) => postStremioApi('addonCollectionSet', { type: 'AddonCollectionSet', authKey, addons }, options)
 
-  if (!response.ok) {
-    throw new Error(getApiErrorMessage(data, `Request failed with HTTP ${response.status}.`))
+export async function fetchAddonManifest(manifestUrl, options = {}) {
+  const validation = validateManifestUrl(manifestUrl)
+  if (!validation.ok) throw new Error(validation.message)
+  let data
+  try {
+    data = await fetchJson(validation.url, { headers: { accept: 'application/json' }, credentials: 'omit', redirect: 'error' }, { ...options, maxBytes: 1024 * 1024, timeoutMs: 10000 })
+  } catch (error) {
+    if (options.signal?.aborted || error.kind !== 'network') throw error
+    // A CORS failure must not become an unrestricted server-side fetch.
+    data = await postStremioApi('manifest', { url: validation.url }, { ...options, maxBytes: 1024 * 1024, timeoutMs: 12000 })
   }
-
-  return data
-}
-
-export function loginToStremio(email, password) {
-  return postStremioApi('login', { email, password })
-}
-
-export function getAddonCollection(authKey) {
-  return postStremioApi('addonCollectionGet', {
-    type: 'AddonCollectionGet',
-    authKey,
-    update: true,
-  })
-}
-
-export function setAddonCollection(authKey, addons) {
-  return postStremioApi('addonCollectionSet', {
-    type: 'AddonCollectionSet',
-    authKey,
-    addons,
-  })
-}
-
-export async function fetchAddonManifest(manifestUrl) {
-  const response = await fetch(`${API_BASE}/manifest?url=${encodeURIComponent(manifestUrl)}`, {
-    headers: { accept: 'application/json' },
-  })
-  const data = await parseJsonResponse(response)
-
-  if (!response.ok) {
-    throw new Error(getApiErrorMessage(data, `Manifest fetch failed with HTTP ${response.status}.`))
-  }
-
-  return data
+  return validateManifest(data)
 }

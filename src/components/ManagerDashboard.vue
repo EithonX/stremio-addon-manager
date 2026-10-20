@@ -2,12 +2,15 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import Draggable from 'vuedraggable'
-import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, PackageOpen, X, Link2, CircleAlert, LoaderCircle } from 'lucide-vue-next'
+import { RefreshCw, Upload, Download, Plus, Search, Lock, Unlock, PackageOpen, X, Link2, CircleAlert, LoaderCircle } from '@lucide/vue'
 import AddonItem from './AddonItem.vue'
 import DynamicForm from './DynamicForm.vue'
 import Modal from './ui/Modal.vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { createEdgeDragScroll } from '../utils/edgeDragScroll'
+import { validateAddonCollection } from '../features/addons/manifestSchema.js'
+import { protectSystemAddons } from '../features/addons/collectionSync.js'
+import { createManifestDraft } from '../features/addons/manifestDraft.js'
 import {
   normalizeAddonCollection,
   normalizeAddonRecord,
@@ -21,6 +24,10 @@ const props = defineProps({
     type: Array,
     required: true
   },
+  editorStates: { type: Object, default: () => ({}) },
+  recovery: { type: Object, default: null },
+  conflict: { type: Object, default: null },
+  uncertainWrite: { type: Boolean, default: false },
   isLoading: {
     type: Boolean,
     default: false
@@ -31,7 +38,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:addons', 'sync', 'reload', 'remove'])
+const emit = defineEmits(['update:addons', 'update:editor-states', 'editor-dirty', 'sync', 'reload', 'remove', 'merge'])
 
 // Local State
 const searchQuery = ref('')
@@ -45,7 +52,8 @@ const isLocked = ref(false)
 const isDragging = ref(false)
 const localAddons = ref([])
 
-const currentEditIndex = ref(null)
+const currentEditTransport = ref('')
+const currentEditDraft = ref(null)
 const currentEditManifest = ref(null)
 const currentEditURL = ref('')
 const isEditDirty = ref(false)
@@ -63,8 +71,8 @@ const confirmModal = ref({
 
 // Computed
 const isSearching = computed(() => searchQuery.value.trim().length > 0)
-const canDrag = computed(() => !isSearching.value && !isLocked.value)
-const isSyncDisabled = computed(() => props.isLoading || !props.hasUnsyncedChanges)
+const canDrag = computed(() => !isSearching.value && !isLocked.value && !props.isLoading)
+const isSyncDisabled = computed(() => props.isLoading || !props.hasUnsyncedChanges && !props.uncertainWrite)
 
 const displayedAddons = computed(() => {
   if (!isSearching.value) return localAddons.value
@@ -126,7 +134,8 @@ const handleEdit = (index) => {
   
   if (realIndex === -1) return
 
-  currentEditIndex.value = realIndex
+  currentEditTransport.value = addon.transportUrl
+  currentEditDraft.value = props.editorStates[addon.transportUrl] || null
   currentEditManifest.value = JSON.parse(JSON.stringify(addon.manifest))
   currentEditURL.value = addon.transportUrl
   isEditDirty.value = false
@@ -135,6 +144,7 @@ const handleEdit = (index) => {
 
 const closeEditModal = () => {
   isEditDirty.value = false
+  emit('editor-dirty', false)
   isEditModalOpen.value = false
 }
 
@@ -177,29 +187,44 @@ const handleRemove = (index) => {
   }
 }
 
-const handleSaveManifest = (newManifest) => {
-  const newAddons = [...localAddons.value]
-  if (currentEditIndex.value !== null && newAddons[currentEditIndex.value]) {
-    newAddons[currentEditIndex.value] = {
-      ...newAddons[currentEditIndex.value],
-      manifest: newManifest,
-    }
-    emit('update:addons', newAddons)
-  }
+const handleSaveManifest = (newManifest, draft) => {
+  const index = localAddons.value.findIndex(addon => addon.transportUrl === currentEditTransport.value)
+  if (index < 0) { closeEditModal(); return }
+  const next = [...localAddons.value]
+  next[index] = { ...next[index], manifest: newManifest }
+  validateAddonCollection(next)
+  emit('update:addons', next)
+  emit('update:editor-states', { ...props.editorStates, [currentEditTransport.value]: draft })
   closeEditModal()
 }
+function handleMove(index, direction) {
+  if (!canDrag.value) return
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= localAddons.value.length) return
+  const next = [...localAddons.value]
+  const [item] = next.splice(index, 1)
+  next.splice(nextIndex, 0, item)
+  emit('update:addons', next)
+}
+function editorDirtyChanged(value) { isEditDirty.value = value; emit('editor-dirty', value) }
 
 let addAddonRunId = 0
+let addAbort = null
+const configureRequiredUrl = ref('')
 
 const openAddModal = () => {
+    if (props.isLoading) return
     isAddModalOpen.value = true
+    configureRequiredUrl.value = ''
     newAddonUrl.value = ''
     addAddonError.value = ''
     isAddingAddon.value = false
 }
 
 const closeAddModal = () => {
-    if (isAddingAddon.value) return
+    addAddonRunId++
+    addAbort?.abort()
+    isAddingAddon.value = false
     isAddModalOpen.value = false
     newAddonUrl.value = ''
     addAddonError.value = ''
@@ -219,7 +244,14 @@ const installAddon = async () => {
     addAddonError.value = ''
 
     try {
-      const manifest = await fetchAddonManifest(url)
+      addAbort = new AbortController()
+      const manifest = await fetchAddonManifest(url, { signal: addAbort.signal })
+      if (manifest.behaviorHints?.configurationRequired) {
+        const configure = new URL(url)
+        configure.pathname = configure.pathname.replace(/\/manifest\.json$/, '/configure')
+        configureRequiredUrl.value = configure.href
+        throw new Error('Configure this addon on its provider page, then paste the configured manifest URL.')
+      }
 
       // Ignore results from a stale request or one whose modal was closed.
       if (runId !== addAddonRunId || !isAddModalOpen.value) return
@@ -234,10 +266,23 @@ const installAddon = async () => {
         throw new Error('Manifest payload is missing required fields (id/version).')
       }
 
-      ensureAddonClientKeys([nextAddon])
-      const newAddons = [...localAddons.value, nextAddon]
-      emit('update:addons', newAddons)
+      const existingIndex = localAddons.value.findIndex(addon => addon.transportUrl === nextAddon.transportUrl)
+      const apply = () => {
+        const next = [...localAddons.value]
+        const currentIndex = next.findIndex(addon => addon.transportUrl === nextAddon.transportUrl)
+        if (currentIndex >= 0) next[currentIndex] = { ...next[currentIndex], manifest: nextAddon.manifest }
+        else next.push(nextAddon)
+        validateAddonCollection(next)
+        emit('update:addons', next)
+        const drafts = { ...props.editorStates }
+        delete drafts[nextAddon.transportUrl]
+        emit('update:editor-states', drafts)
+        confirmModal.value.show = false
+      }
       isAddModalOpen.value = false
+      if (existingIndex >= 0) {
+        confirmModal.value = { show: true, title: 'Update existing addon?', message: 'This URL is already installed. Replace its current manifest with the provider version? Local manifest customizations for this addon will be reset.', confirmText: 'Update addon', type: 'info', action: apply }
+      } else apply()
       newAddonUrl.value = ''
       addAddonError.value = ''
     } catch (e) {
@@ -250,14 +295,14 @@ const installAddon = async () => {
     }
 }
 
-const backupConfig = () => {
+const downloadBackup = (payload, prefix = 'stremio-addons-backup') => {
   backupRestoreError.value = ''
-  const data = JSON.stringify({ addons: localAddons.value }, null, 2)
+  const data = JSON.stringify(payload, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `stremio-addons-backup-${new Date().toISOString().slice(0,10)}.json`
+  a.download = `${prefix}-${new Date().toISOString().slice(0,10)}.json`
   a.style.display = 'none'
   document.body.appendChild(a)
   a.click()
@@ -267,6 +312,9 @@ const backupConfig = () => {
   }, 100)
 }
 
+const backupConfig = () => downloadBackup({ formatVersion: 2, createdAt: new Date().toISOString(), addons: localAddons.value, editorStates: props.editorStates })
+const backupRecovery = () => { if (props.recovery) downloadBackup(props.recovery, 'stremio-recovery') }
+
 const restoreConfig = () => {
   backupRestoreError.value = ''
   const input = document.createElement('input')
@@ -275,10 +323,15 @@ const restoreConfig = () => {
   input.onchange = (e) => {
     const file = e.target.files[0]
     if (!file) return
+    if (file.size > 4 * 1024 * 1024) { backupRestoreError.value = 'This backup exceeds the 4 MiB limit.'; return }
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const restoredAddons = parseAddonBackup(JSON.parse(e.target.result))
+        const payload = JSON.parse(e.target.result)
+        const restoredAddons = parseAddonBackup(payload)
+        validateAddonCollection(restoredAddons)
+        protectSystemAddons(props.addons, restoredAddons)
+        const restoredDrafts = Object.fromEntries(restoredAddons.map(addon => [addon.transportUrl, createManifestDraft(addon.manifest, payload.editorStates?.[addon.transportUrl]).draft]))
         confirmModal.value = {
           show: true,
           title: 'Restore Backup?',
@@ -287,6 +340,7 @@ const restoreConfig = () => {
           type: 'info',
           action: () => {
             emit('update:addons', restoredAddons)
+            emit('update:editor-states', restoredDrafts)
             confirmModal.value.show = false
             backupRestoreError.value = ''
           }
@@ -318,6 +372,8 @@ function handleAddonDragEnd() {
 
 onUnmounted(() => {
   edgeDragScroll.stop()
+  addAddonRunId++
+  addAbort?.abort()
 })
 </script>
 
@@ -358,7 +414,7 @@ onUnmounted(() => {
             :disabled="isSyncDisabled"
           >
             <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
-            <span>{{ hasUnsyncedChanges ? 'Sync' : 'Synced' }}</span>
+            <span>{{ uncertainWrite ? 'Verify sync' : hasUnsyncedChanges ? 'Review sync' : 'Synced' }}</span>
           </button>
         </div>
 
@@ -392,6 +448,7 @@ onUnmounted(() => {
           </button>
 
           <div class="flex h-10 shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
+            <button type="button" @click="$emit('reload')" :disabled="isLoading" class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-white disabled:opacity-40 dark:hover:bg-zinc-800" aria-label="Reload from Stremio" title="Reload from Stremio"><RefreshCw class="h-4 w-4" /></button>
             <button
               type="button"
               @click="isLocked = !isLocked"
@@ -475,6 +532,7 @@ onUnmounted(() => {
           </button>
 
           <div class="flex h-10 items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50/80 p-0.5 dark:border-white/10 dark:bg-zinc-950/50">
+            <button type="button" @click="$emit('reload')" :disabled="isLoading" class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-white disabled:opacity-40 dark:hover:bg-zinc-800" aria-label="Reload from Stremio" title="Reload from Stremio"><RefreshCw class="h-4 w-4" /></button>
             <button
               type="button"
               @click="isLocked = !isLocked"
@@ -515,7 +573,7 @@ onUnmounted(() => {
             :disabled="isSyncDisabled"
           >
             <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
-            <span>{{ hasUnsyncedChanges ? 'Sync changes' : 'Synced' }}</span>
+            <span>{{ uncertainWrite ? 'Verify sync' : hasUnsyncedChanges ? 'Review sync' : 'Synced' }}</span>
           </button>
         </div>
       </div>
@@ -538,6 +596,13 @@ onUnmounted(() => {
       </button>
     </div>
 
+    <div v-if="conflict" role="status" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+      <p class="font-semibold">Stremio changed since this workspace was loaded.</p>
+      <ul class="mt-2 space-y-1"><li v-for="(change, index) in conflict.changes" :key="index">{{ change.kind }}: {{ change.name }}</li></ul>
+      <p v-if="conflict.conflicts?.length" class="mt-2">Overlapping changes: {{ conflict.conflicts.join(', ') }}. Your draft is still intact.</p>
+      <div class="mt-3 flex flex-wrap gap-3"><button type="button" class="rounded-lg border px-3 py-2" @click="$emit('merge')">Merge non-overlapping changes</button><button type="button" class="rounded-lg border px-3 py-2" @click="backupConfig">Download current draft</button><button type="button" class="rounded-lg border px-3 py-2" @click="$emit('reload')">Reload from Stremio</button></div>
+    </div>
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500"><p>Private backups contain configured addon URLs and may contain service credentials.</p><button v-if="recovery" type="button" @click="backupRecovery" class="rounded-lg border px-3 py-2 font-semibold">Download recovery backup</button></div>
     <div v-if="localAddons.length === 0" class="animate-fade-in-up rounded-3xl border border-zinc-200 bg-white/75 px-6 py-8 text-center shadow-sm dark:border-white/5 dark:bg-zinc-900/60">
       <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 text-zinc-400 shadow-inner dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-500">
         <PackageOpen class="h-6 w-6" />
@@ -588,9 +653,11 @@ onUnmounted(() => {
         <template #item="{ element, index }">
           <AddonItem 
             :addon="element"
-            :is-locked="isLocked"
+            :is-locked="!canDrag"
+            :is-busy="isLoading"
             @remove="handleRemove(index)"
             @edit="handleEdit(index)"
+            @move="handleMove(index, $event)"
           />
         </template>
       </Draggable>
@@ -600,9 +667,11 @@ onUnmounted(() => {
             v-for="(element, index) in displayedAddons"
             :key="element.__clientKey"
             :addon="element"
-            :is-locked="isLocked"
+            :is-locked="!canDrag"
+            :is-busy="isLoading"
             @remove="handleRemove(index)"
             @edit="handleEdit(index)"
+            @move="handleMove(index, $event)"
           />
           <div v-if="hasSearchNoResults" class="rounded-3xl border border-zinc-200 bg-white/75 px-6 py-8 text-center shadow-sm dark:border-white/5 dark:bg-zinc-900/60">
             <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
@@ -653,6 +722,7 @@ onUnmounted(() => {
           Supports <span class="font-medium text-zinc-500 dark:text-zinc-400">https://.../manifest.json</span> and <span class="font-medium text-zinc-500 dark:text-zinc-400">stremio://</span> links. The manifest is fetched before adding.
         </p>
 
+        <a v-if="configureRequiredUrl" :href="configureRequiredUrl" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 underline">Open provider configuration</a>
         <div
           v-if="addAddonError"
           class="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
@@ -665,7 +735,6 @@ onUnmounted(() => {
         <button
           type="button"
           @click="closeAddModal"
-          :disabled="isAddingAddon"
           class="inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold text-zinc-500 transition hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-zinc-500 dark:text-zinc-400 dark:hover:text-zinc-200 dark:disabled:hover:text-zinc-400"
         >
           Cancel
@@ -686,6 +755,7 @@ onUnmounted(() => {
     <!-- Detailed Edit Modal -->
     <Modal
       :show="isEditModalOpen"
+      title="Edit manifest"
       @close="handleEditModalCloseRequest"
       max-width="max-w-4xl"
       no-header
@@ -696,10 +766,11 @@ onUnmounted(() => {
         v-if="currentEditManifest"
         :manifest="currentEditManifest"
         :manifestURL="currentEditURL"
+        :saved-draft="currentEditDraft"
         :scroll-container="scrollContainer"
         @update-manifest="handleSaveManifest"
         @cancel="closeEditModal"
-        @dirty-change="isEditDirty = $event"
+        @dirty-change="editorDirtyChanged"
       />
     </Modal>
 

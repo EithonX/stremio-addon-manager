@@ -40,3 +40,5 @@ Thumbs.db
 coverage
 /cypress/videos/
 /cypress/screenshots/
+# Optional local browser-test artifacts
+/browser-artifacts/

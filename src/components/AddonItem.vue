@@ -89,7 +89,7 @@ watch(logo, () => {
       />
     </div>
 
-    <div class="min-w-0 flex-grow overflow-hidden">
+    <div class="min-w-0 flex-1 overflow-hidden">
       <div class="flex min-w-0 items-center gap-2">
         <h3 class="min-w-0 line-clamp-2 break-words text-sm font-semibold text-zinc-950 dark:text-zinc-100 sm:line-clamp-none sm:truncate sm:text-base">
           {{ manifest.name }}

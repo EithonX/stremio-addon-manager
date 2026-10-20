@@ -22,6 +22,9 @@ const catalogs = [
 ]
 const descriptor = (id, name, resources, items) => ({ transportUrl: `https://provider.example.com/${id}/manifest.json`, manifest: { id, name, version: '1.0.0', description: 'Browser test fixture', types: ['movie'], resources, catalogs: items }, flags: { official: false, protected: false } })
 const source = [descriptor('a', 'Fixture A', ['catalog', 'meta', 'stream'], catalogs), descriptor('b', 'Fixture B', ['stream'], [])]
+source[0].manifest.name = 'Fixture A with a long addon name that should stay beside its logo and action buttons'
+source[0].manifest.description = 'A configurable addon with movie and series catalogs, search, metadata and streams. '.repeat(5)
+source[0].manifest.behaviorHints = { configurable: true }
 async function visibleButton(page, name) { return page.getByRole('button', { name, exact: true }).filter({ visible: true }) }
 async function editFirst(page) {
   await page.getByRole('button', { name: 'Edit manifest', exact: true }).first().click()
@@ -77,6 +80,30 @@ async function readableRemember(page, theme) {
   assert.ok(result.contrast >= 4.5, `${currentCase}: remember label contrast ${result.contrast}`)
   assert.equal(result.scheme, theme)
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${currentCase}: landing overflow`)
+}
+async function addonRowLayout(page) {
+  const desktop = page.viewportSize().width >= 640
+  const rows = await page.locator('.reorder-card').evaluateAll(cards => cards.map(card => {
+    const rect = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, center: (r.top + r.bottom) / 2 } }
+    const drag = card.querySelector('.drag-handle')
+    return {
+      row: rect(card), logo: rect(drag.nextElementSibling),
+      text: rect(card.querySelector('h3').parentElement.parentElement),
+      actions: rect(card.querySelector('button[aria-label="Copy manifest URL"]').parentElement),
+    }
+  }))
+  assert.equal(rows.length, source.length)
+  for (const { row, logo, text, actions } of rows) {
+    assert.ok(text.right <= row.right && actions.right <= row.right, `${currentCase}: addon content overflows its card`)
+    if (desktop) {
+      assert.ok(Math.abs(logo.center - text.center) < 1, `${currentCase}: addon text wrapped below its logo`)
+      assert.ok(Math.abs(logo.center - actions.center) < 1, `${currentCase}: addon actions wrapped below the text`)
+      assert.ok(text.right <= actions.left, `${currentCase}: addon text overlaps the actions`)
+    } else {
+      assert.ok(actions.top >= text.bottom, `${currentCase}: mobile addon actions overlap the title`)
+    }
+  }
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${currentCase}: addon list overflows the viewport`)
 }
 let preview
 let diagnosticPage, diagnosticErrors
@@ -162,8 +189,32 @@ try {
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]').some(a => a.email === 'alpha@example.com' && a.vaultVersion === 2))
     assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('fixture-key-a'))
 
+    const viewport = page.viewportSize()
+    for (const width of mode === 'desktop' ? [1280, 1024, 768, 640] : [360, 320]) {
+      await page.setViewportSize({ ...viewport, width })
+      await addonRowLayout(page)
+    }
+    await page.setViewportSize(viewport)
+    await capture(page, 'long-addon-rows')
+    await page.evaluate(() => {
+      const writeText = navigator.clipboard.writeText.bind(navigator.clipboard)
+      navigator.clipboard.writeText = async () => {
+        navigator.clipboard.writeText = writeText
+        throw new DOMException('Clipboard access denied', 'NotAllowedError')
+      }
+    })
+    await page.getByRole('button', { name: 'Copy manifest URL', exact: true }).first().click()
+    const clipboardError = page.getByRole('status').filter({ hasText: 'Couldn’t copy the link.' })
+    await clipboardError.waitFor()
+    await addonRowLayout(page)
+    assert.equal(await clipboardError.evaluate(error => {
+      const actions = error.closest('.reorder-card').querySelector('button[aria-label="Copy manifest URL"]').parentElement
+      return error.getBoundingClientRect().top >= actions.getBoundingClientRect().bottom
+    }), true, `${currentCase}: clipboard error overlaps addon actions`)
+    await capture(page, 'clipboard-error')
     await page.getByRole('button', { name: 'Copy manifest URL', exact: true }).first().click()
     await page.locator('button[title="Link copied"]').first().waitFor()
+    await clipboardError.waitFor({ state: 'hidden' })
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), source[0].transportUrl)
     let editor = await editFirst(page)
     await capture(page, 'editor')

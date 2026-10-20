@@ -3,11 +3,14 @@ import { readFile, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
+import { onRequest } from '../functions/api/[[path]].js'
+import { encryptSavedSession } from '../src/utils/cryptoVault.js'
 
 // Build and preview the application first. All account/provider responses are
 // fixtures; this suite never sends credentials or requests to real services.
 const baseUrl = process.env.BROWSER_BASE_URL || 'http://127.0.0.1:4173'
 const output = process.env.BROWSER_ARTIFACT_DIR
+const originalFetch = globalThis.fetch
 const browser = await chromium.launch({
   executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined,
   headless: true,
@@ -62,7 +65,7 @@ async function capture(page, name) {
   await page.screenshot({ path: resolve(output, `${currentCase}-${name}.png`), fullPage: true })
 }
 async function readableRemember(page, theme) {
-  const result = await page.locator('label').filter({ hasText: 'Remember this account' }).evaluate(label => {
+  const result = await page.locator('label').filter({ hasText: 'Keep me signed in' }).evaluate(label => {
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = 1
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
@@ -126,8 +129,8 @@ try {
     const context = await browser.newContext({ colorScheme: theme, viewport: mode === 'desktop' ? { width: 1280, height: 900 } : { width: 360, height: 800 }, isMobile: mode === 'mobile', hasTouch: mode === 'mobile', permissions: ['clipboard-read', 'clipboard-write'] })
     const remote = { 'fixture-key-a': copy(source), 'fixture-key-b': [descriptor('other', 'Other account addon', ['stream'], [])] }
     const writes = [], revocations = [], errors = []
-    let failReads = false
-    await context.route('**/*', async route => {
+    let failReads = false, failRevocation = false, loginCount = 0
+    const externalRoute = async route => {
       const url = new URL(route.request().url())
       if (url.origin === new URL(baseUrl).origin) { await route.continue(); return }
       if (url.hostname === 'provider.example.com') {
@@ -137,25 +140,34 @@ try {
       }
       // Third-party logos are irrelevant to these tests. No external traffic.
       await route.abort()
-    })
-    await context.route('**/api/**', async route => {
-      const url = new URL(route.request().url())
-      assert.equal(url.origin, new URL(baseUrl).origin)
-      const body = route.request().postDataJSON()
-      const endpoint = url.pathname.split('/').pop()
-      if (endpoint === 'login') { await route.fulfill({ json: { result: { authKey: 'fixture-key-a', user: { _id: 'A', email: 'alpha@example.com' } } } }); return }
-      if (endpoint === 'getUser') { await route.fulfill({ json: { result: { _id: body.authKey === 'fixture-key-a' ? 'A' : 'B', email: body.authKey === 'fixture-key-a' ? 'alpha@example.com' : 'beta@example.com' } } }); return }
+    }
+    globalThis.fetch = async (url, options) => {
+      assert.equal(new URL(url).origin, 'https://api.strem.io')
+      const endpoint = new URL(url).pathname.split('/').pop(), body = JSON.parse(options.body)
+      if (endpoint === 'login') { loginCount++; return Response.json({ result: { authKey: 'fixture-key-a', user: { _id: 'A', email: 'alpha@example.com' } } }) }
+      if (endpoint === 'getUser') return Response.json({ result: { _id: body.authKey === 'fixture-key-a' ? 'A' : 'B', email: body.authKey === 'fixture-key-a' ? 'alpha@example.com' : 'beta@example.com' } })
       if (endpoint === 'addonCollectionGet') {
-        if (failReads) { await route.fulfill({ status: 502, json: { error: { message: 'Simulated outage' } } }); return }
-        await route.fulfill({ json: { result: { addons: remote[body.authKey] } } }); return
+        if (failReads) return Response.json({ error: { message: 'Simulated outage' } }, { status: 502 })
+        return Response.json({ result: { addons: remote[body.authKey] } })
       }
       if (endpoint === 'addonCollectionSet') {
         writes.push(copy(body)); remote[body.authKey] = copy(body.addons)
-        await route.fulfill({ json: { result: { success: true } } }); return
+        return Response.json({ result: { success: true } })
       }
-      if (endpoint === 'logout') { revocations.push(body); await route.fulfill({ json: { result: { success: true } } }); return }
+      if (endpoint === 'logout') { revocations.push(body); return failRevocation ? Response.json({ error: { message: 'Simulated sign-out outage' } }, { status: 503 }) : Response.json({ result: { success: true } }) }
       throw new Error(`Unexpected API route: ${endpoint}`)
-    })
+    }
+    const apiRoute = async route => {
+      const request = route.request()
+      const response = await onRequest({ request: new Request(request.url(), { method: request.method(), headers: await request.allHeaders(), body: request.postData() }), env: { SESSION_SECRET: 'a7'.repeat(32) } })
+      const headers = Object.fromEntries(response.headers)
+      if (response.headers.getSetCookie().length) headers['set-cookie'] = response.headers.getSetCookie().join('\n')
+      const body = await response.text()
+      assert.ok(!body.includes('fixture-key-a') && !body.includes('fixture-key-b'), 'API response exposed an upstream key')
+      await route.fulfill({ status: response.status, headers, body })
+    }
+    await context.route('**/*', externalRoute)
+    await context.route('**/api/**', apiRoute)
     const page = await context.newPage()
     page.setDefaultTimeout(10000)
     diagnosticPage = page; diagnosticErrors = errors
@@ -163,6 +175,13 @@ try {
     await page.goto(baseUrl)
     await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
     await readableRemember(page, theme)
+    await page.getByRole('button', { name: 'Desktop', exact: true }).click()
+    await page.getByText('Open browser console (', { exact: false }).waitFor()
+    assert.equal(await page.getByText('Mobile bookmarklets can be inconsistent.', { exact: false }).count(), 0)
+    await page.getByRole('button', { name: 'Mobile', exact: true }).click()
+    await page.getByText('Mobile bookmarklets can be inconsistent.', { exact: false }).waitFor()
+    assert.equal(await page.getByText('Open browser console (', { exact: false }).count(), 0)
+    await page.getByRole('button', { name: mode === 'desktop' ? 'Desktop' : 'Mobile', exact: true }).click()
     const otherTheme = theme === 'dark' ? 'light' : 'dark'
     await page.getByRole('button', { name: 'Toggle Theme', exact: true }).click()
     await readableRemember(page, otherTheme)
@@ -180,14 +199,21 @@ try {
     await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click()
     await page.getByLabel('Email', { exact: true }).fill('alpha@example.com')
     await page.getByLabel('Password', { exact: true }).fill('fixture-password')
-    await page.getByLabel('Remember this account', { exact: true }).check()
-    await page.getByLabel('Passphrase to unlock', { exact: true }).fill('fixture-passphrase-123')
+    await page.getByLabel('Keep me signed in', { exact: true }).check()
     await readableRemember(page, theme)
     await capture(page, 'remember')
     await page.getByRole('button', { name: 'Connect Account', exact: true }).click()
     await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
-    await page.waitForFunction(() => JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]').some(a => a.email === 'alpha@example.com' && a.vaultVersion === 2))
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]').some(a => a.email === 'alpha@example.com' && a.sessionId))
     assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('fixture-key-a'))
+    await page.waitForFunction(() => Object.keys(localStorage).some(key => key.startsWith('sam_workspace_')))
+    assert.equal(await page.evaluate(() => document.cookie.includes('__Host-sam_')), false)
+    const cookies = (await context.cookies()).filter(cookie => cookie.name.startsWith('__Host-sam_'))
+    assert.equal(cookies.length, 2)
+    assert.ok(cookies.every(cookie => cookie.httpOnly && cookie.secure && cookie.sameSite === 'Strict' && cookie.expires > Date.now() / 1000))
+    await page.reload()
+    await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    assert.equal(loginCount, 1, 'refresh created a new Stremio session')
 
     const viewport = page.viewportSize()
     for (const width of mode === 'desktop' ? [1280, 1024, 768, 640] : [360, 320]) {
@@ -312,12 +338,19 @@ try {
     const other = await context.newPage()
     other.on('pageerror', error => errors.push(error.message))
     await other.goto(baseUrl)
+    await other.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    await other.getByRole('button', { name: 'Account menu', exact: true }).click()
+    await other.getByRole('menuitem', { name: 'Switch account', exact: true }).click()
+    await other.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
     await other.getByLabel('Email', { exact: true }).fill('unused@example.com')
     await other.getByLabel('Password', { exact: true }).fill('unused-password')
     await other.getByLabel('Stremio AuthKey', { exact: true }).fill('fixture-key-b')
     await other.getByRole('button', { name: 'Go', exact: true }).click()
     await other.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
     await other.evaluate(() => localStorage.setItem('stremio_auth_key', 'fixture-key-b'))
+    await page.reload()
+    await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    assert.equal((await backup(page)).addons[0].manifest.id, 'a')
     editor = await editFirst(page)
     await editor.getByPlaceholder('Addon Name', { exact: true }).fill('Edited again in A')
     await closeSaved(editor)
@@ -350,15 +383,27 @@ try {
     assert.equal(await page.getByRole('button', { name: 'Account menu', exact: true }).count(), 0)
     await page.locator('button[aria-haspopup="listbox"]').click()
     await page.getByRole('option').filter({ hasText: 'alpha@example.com' }).click()
-    await page.getByLabel('Saved account PIN or passphrase', { exact: true }).fill('fixture-passphrase-123')
-    await page.getByLabel('Saved account PIN or passphrase', { exact: true }).press('Enter')
-    await page.getByText('Unlocked. Select Go to connect to Stremio.', { exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: 'Account menu', exact: true }).count(), 0)
-    await page.getByRole('button', { name: 'Go', exact: true }).click()
+    await page.getByRole('button', { name: 'Connect Account', exact: true }).click()
     await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
     await page.waitForFunction(() => !document.querySelector('button[aria-label="Reload from Stremio"]:disabled'))
     editor = await editFirst(page)
     assert.equal(await editor.getByRole('switch', { name: 'Search support', exact: true }).getAttribute('aria-checked'), 'false')
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click()
+    // A fresh context has no tab memory: only persistent cookies and encrypted
+    // local settings carry over, just as when reopening the browser.
+    const storageState = await context.storageState()
+    storageState.cookies = storageState.cookies.filter(cookie => cookie.expires > Date.now() / 1000)
+    const reopened = await browser.newContext({ storageState, viewport: page.viewportSize() })
+    await reopened.route('**/*', externalRoute)
+    await reopened.route('**/api/**', apiRoute)
+    const reopenedPage = await reopened.newPage()
+    await reopenedPage.goto(baseUrl)
+    await reopenedPage.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    assert.equal((await backup(reopenedPage)).addons[0].manifest.name, 'Edited again in A')
+    assert.equal(loginCount, 1, 'browser reopen created a new Stremio session')
+    await reopened.close()
+    editor = await editFirst(page)
     await editor.getByRole('switch', { name: 'Search support', exact: true }).click()
     await closeSaved(editor)
     const restoredSource = await backup(page)
@@ -366,17 +411,61 @@ try {
     assert.equal(restoredSource.addons[0].manifest.name, 'Edited again in A')
     await page.getByRole('button', { name: 'Account menu', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Sign out of Stremio', exact: true }).click()
-    const revoke = page.getByRole('dialog', { name: 'Sign out of Stremio?', exact: true })
+    let revoke = page.getByRole('dialog', { name: 'Sign out of Stremio?', exact: true })
+    failRevocation = true
     await revoke.getByRole('button', { name: 'Sign out of Stremio', exact: true }).click()
     await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
-    assert.deepEqual(revocations, [{ type: 'Logout', authKey: 'fixture-key-a' }])
-    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sam_saved_accounts')).find(a => a.email === 'alpha@example.com').authKeyEncrypted ?? null), null)
+    await page.getByRole('alert').filter({ hasText: 'could not be confirmed' }).waitFor()
+    assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('sam_saved_accounts')).some(a => a.email === 'alpha@example.com' && a.sessionId)))
+    await page.locator('button[aria-haspopup="listbox"]').click()
+    await page.getByRole('option').filter({ hasText: 'alpha@example.com' }).click()
+    await page.getByRole('button', { name: 'Connect Account', exact: true }).click()
+    await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    failRevocation = false
+    await page.getByRole('button', { name: 'Account menu', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Sign out of Stremio', exact: true }).click()
+    revoke = page.getByRole('dialog', { name: 'Sign out of Stremio?', exact: true })
+    await revoke.getByRole('button', { name: 'Sign out of Stremio', exact: true }).click()
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('sam_saved_accounts')).some(a => a.email === 'alpha@example.com'))
+    assert.deepEqual(revocations, Array(2).fill({ type: 'Logout', authKey: 'fixture-key-a' }))
+    await page.reload()
+    await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Account menu', exact: true }).count(), 0)
+    if (currentCase === 'desktop-light') {
+      const legacy = { ...await encryptSavedSession('fixture-key-b', 'fixture-passphrase-123'), email: 'beta@example.com', userId: 'B', label: 'Legacy B' }
+      await page.evaluate(account => {
+        const accounts = JSON.parse(localStorage.getItem('sam_saved_accounts')).filter(saved => saved.email !== account.email)
+        localStorage.setItem('sam_saved_accounts', JSON.stringify([...accounts, account]))
+      }, legacy)
+      await page.reload()
+      await page.locator('button[aria-haspopup="listbox"]').click()
+      await page.getByRole('option').filter({ hasText: 'Legacy B' }).click()
+      await page.getByLabel('Saved account PIN or passphrase', { exact: true }).fill('fixture-passphrase-123')
+      await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+      await page.getByText('Unlocked. Select Go to connect to Stremio.', { exact: true }).waitFor()
+      await page.getByRole('button', { name: 'Go', exact: true }).click()
+      await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('sam_saved_accounts')).some(a => a.email === 'beta@example.com' && a.sessionId && !a.authKeyEncrypted && a.label === 'Legacy B'))
+      await page.getByRole('button', { name: 'Account menu', exact: true }).click()
+      await page.getByRole('menuitem', { name: 'Switch account', exact: true }).click()
+      await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
+    }
+    await page.getByLabel('Keep me signed in', { exact: true }).uncheck()
+    await page.getByLabel('Stremio AuthKey', { exact: true }).fill('fixture-key-b')
+    await page.getByRole('button', { name: 'Go', exact: true }).click()
+    await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    const sessionOnlyId = await page.evaluate(() => sessionStorage.getItem('sam_active_session'))
+    assert.equal((await context.cookies()).find(cookie => cookie.name === `__Host-sam_${sessionOnlyId}`).expires, -1)
+    await page.reload()
+    await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
+    assert.equal(loginCount, 1)
+    assert.ok(!(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, tab: { ...sessionStorage } }))).includes('fixture-key'))
     assert.deepEqual(errors, [])
-    console.log(`PASS ${currentCase}: login, encrypted persistence, JSON validation/copy, reversible toggles, nested Escape, review/sync/recovery, duplicate/config checks, transient errors, account isolation and revocation`)
+    console.log(`PASS ${currentCase}: cookie login, refresh/browser reopen, encrypted settings, account isolation, failed/successful revocation, layout, JSON validation, toggles, nested dialogs and sync`)
     await context.close()
   }
 } catch (error) {
   console.error('Browser diagnostics:', JSON.stringify({ errors: diagnosticErrors, body: diagnosticPage ? (await diagnosticPage.locator('body').innerText()).slice(0, 5000) : '' }))
   if (output && diagnosticPage) { await mkdir(output, { recursive: true }); await diagnosticPage.screenshot({ path: resolve(output, 'failure.png'), fullPage: true }) }
   throw error
-} finally { await browser.close(); preview?.kill() }
+} finally { globalThis.fetch = originalFetch; await browser.close(); preview?.kill() }

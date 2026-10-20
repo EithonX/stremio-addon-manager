@@ -1,5 +1,6 @@
 import { useStorage } from '@vueuse/core'
 import { normalizeKdfIterations } from '../../utils/cryptoVault.js'
+import { validSessionId } from './sessionReference.js'
 
 export const DEFAULT_SAVED_ACCOUNT = Object.freeze({
   email: '',
@@ -32,6 +33,13 @@ export function normalizeSavedAccount(account) {
     userId: typeof account.userId === 'string' ? account.userId : '',
     origin: account.origin === 'password' ? 'password' : 'imported',
     vaultVersion: account.vaultVersion === 2 ? 2 : 1,
+  }
+
+  if (validSessionId(account.sessionId) && normalized.userId) {
+    normalized.sessionId = account.sessionId
+    normalized.expiresAt = Number.isFinite(account.expiresAt) ? account.expiresAt : 0
+    normalized.protected = false // The credential is protected by an HttpOnly cookie.
+    return normalized
   }
 
   if (
@@ -97,7 +105,7 @@ export function useSavedAccounts() {
   function upsertSavedAccount(account) {
     const normalized = normalizeSavedAccount(account)
 
-    if (!normalized || !normalized.protected) {
+    if (!normalized || !normalized.protected && !normalized.sessionId) {
       return null
     }
 
@@ -150,10 +158,7 @@ export function useSavedAccounts() {
   }
 
   function invalidateSavedKey(authKeyHash) {
-    commit(savedAccounts.value.map(account => {
-      if (account.authKeyHash !== authKeyHash) return account
-      return { email: account.email, label: account.label, userId: account.userId, updatedAt: Date.now(), needsReconnect: true, protected: false }
-    }))
+    commit(savedAccounts.value.filter(account => account.authKeyHash !== authKeyHash))
   }
 
   return {

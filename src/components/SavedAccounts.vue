@@ -3,6 +3,7 @@ import { shallowRef, computed, nextTick, watch, onMounted, onUnmounted, useTempl
 import { ChevronDown, Edit2, Trash2, Check, Lock } from '@lucide/vue'
 import ConfirmationModal from './ui/ConfirmationModal.vue'
 import { useSavedAccounts } from '../features/accounts/useSavedAccounts'
+import { forgetBrowserSession } from '../features/api/stremioApi.js'
 
 const emit = defineEmits(['selected'])
 
@@ -61,8 +62,14 @@ function confirmRemove() {
   showConfirm.value = true
 }
 
-function handleRemoveConfirm() {
+async function handleRemoveConfirm() {
   try {
+    const sessionId = selectedAccount.value?.sessionId
+    if (sessionId) {
+      try { await forgetBrowserSession(sessionId) }
+      catch (error) { if (error.code !== 'SESSION_EXPIRED') throw error }
+      localStorage.removeItem(`sam_workspace_${sessionId}`)
+    }
     removeSavedAccount(selectedEmail.value)
     selectedEmail.value = DEFAULT_EMAIL
     emit('selected', { ...defaultSavedAccount })
@@ -189,7 +196,7 @@ onUnmounted(() => {
                 <div class="flex min-w-0 flex-col pr-2">
                   <span class="flex items-center gap-1.5 truncate font-medium">
                     {{ acc.label }}
-                    <Lock v-if="acc.protected" class="w-3 h-3 text-amber-500 shrink-0" />
+                    <Lock v-if="acc.protected || acc.sessionId" class="w-3 h-3 text-amber-500 shrink-0" />
                   </span>
                   <span v-if="acc.label !== acc.email" class="text-xs text-zinc-400 truncate">{{ acc.email }}</span>
                 </div>

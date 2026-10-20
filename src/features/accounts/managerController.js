@@ -43,8 +43,17 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
     state.busy = 'connect'
     let key, ownsNewSession = false, committed = false
     try {
-      let user, origin = input.origin === 'password' ? 'password' : 'imported'
-      if (input.authKey) key = input.authKey.trim()
+      let user, savedWorkspace, sessionInfo = {}, origin = input.origin === 'password' ? 'password' : 'imported'
+      if (api.startSession) {
+        const started = (await api.startSession(input, { signal: abort.signal })).result
+        if (!started && input.resume) { if (run === generation) state.phase = 'signedOut'; return null }
+        key = started?.authKey
+        user = started?.user
+        origin = started?.origin
+        sessionInfo = { sessionId: started?.sessionId, expiresAt: started?.expiresAt, persistent: started?.persistent, authKeyHash: started?.authKeyHash }
+        ownsNewSession = started?.newlyIssued === true
+      }
+      else if (input.authKey) key = input.authKey.trim()
       else {
         const login = await api.loginToStremio(input.email.trim(), input.password, { signal: abort.signal })
         key = login.result?.authKey
@@ -56,6 +65,7 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
       if (!user) user = (await api.getStremioUser(key, { signal: abort.signal })).result
       user = verifiedUser(user)
       if (input.expectedUserId && input.expectedUserId !== user.id) throw new Error('This saved account does not match the Stremio account. Sign in again.')
+      if (api.loadSessionWorkspace) savedWorkspace = await api.loadSessionWorkspace(key, { signal: abort.signal })
       const response = await api.getAddonCollection(key, { signal: abort.signal })
       const collection = validatedCollection(response.result?.addons)
       if (run !== generation || abort.signal.aborted) return null
@@ -65,13 +75,14 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
       state.user = { ...user, origin }
       state.addons = collection
       state.baseline = deepClone(collection)
-      state.editorStates = deepClone(input.editorStates || {})
+      state.editorStates = deepClone(savedWorkspace?.editorStates || input.editorStates || {})
       state.baselineEditorStates = deepClone(state.editorStates)
-      state.recovery = input.recovery?.userId === user.id ? deepClone(input.recovery) : null
+      const recovery = savedWorkspace?.recovery || input.recovery
+      state.recovery = recovery?.userId === user.id ? deepClone(recovery) : null
       state.phase = 'ready'
       state.error = ''
       committed = true
-      return { authKey: key, user, origin, isCurrent: () => isCurrent(ctx) }
+      return { authKey: key, user, origin, ...sessionInfo, signal: abort.signal, isCurrent: () => isCurrent(ctx) }
     } catch (error) {
       if (run === generation && !abort.signal.aborted) {
         state.phase = 'signedOut'

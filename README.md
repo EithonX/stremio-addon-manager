@@ -56,9 +56,10 @@ Stremio Addon Manager loads your addon collection, lets you make local changes, 
 
 ## Privacy
 
-- Active sessions stay in the current tab. Remembered accounts are encrypted on your device and require an unlock password when you return.
+- Refreshing keeps you signed in. **Keep me signed in** also restores your session after reopening the browser, for up to 30 days.
+- Sign-in keys are encrypted in Secure, HttpOnly, SameSite cookies. Page scripts cannot read them; local account settings are also encrypted.
 - Sign-in requests pass through this site to Stremio. Your Stremio password is never saved.
-- **Switch account** disconnects from the manager. **Sign out of Stremio** also ends the Stremio session associated with that AuthKey.
+- **Switch account** keeps your saved login. **Sign out of Stremio** ends that Stremio session and removes its saved login. Closing a tab is not a Stremio sign-out.
 - Keep downloaded backups private: configured addon links can contain credentials.
 
 ## Local development
@@ -70,6 +71,8 @@ npm run dev:pages
 
 Use Node.js 24 or later. This command builds the frontend and starts the local Cloudflare API server. Rebuild after frontend edits.
 
+For local sign-in, put `SESSION_SECRET=<64 random hex characters>` in `.dev.vars`. Generate a value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
+
 ## Deployment
 
 Deploy on Cloudflare Pages with:
@@ -78,6 +81,8 @@ Deploy on Cloudflare Pages with:
 - Output directory: `dist`
 
 Functions live in `functions/api` and are detected automatically. Set the build environment variable `NODE_VERSION=24`.
+
+Before deploying, add **SESSION_SECRET** as an encrypted Cloudflare Pages secret for Production (and Preview if used), using 32 random bytes encoded as 64 hex characters. Keep it out of `vars`, Git, and `VITE_*` variables. Reuse it across deployments; changing it signs users out of the manager and makes existing local settings unreadable, without revoking their Stremio sessions.
 
 Manifests load directly from their providers. For providers that need a server fallback, set `vars.MANIFEST_PROXY_ORIGINS` in `wrangler.jsonc` to a comma-separated list of exact trusted origins. It is empty by default; wildcards are not supported.
 

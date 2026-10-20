@@ -4,6 +4,8 @@
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-10-20",
 
+  // SESSION_SECRET must be an encrypted Pages secret, never a public var here.
+
   "vars": {
     // Empty means manifests are fetched directly in the browser.
     // Server fallback is enabled only for explicitly trusted origins.

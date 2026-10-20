@@ -91,6 +91,43 @@ test('saved account identity mismatch cannot import another account workspace', 
   assert.deepEqual(f.state.editorStates, {})
   assert.match(f.state.error, /does not match/)
 })
+test('cookie resume restores verified workspace metadata without issuing or exposing an upstream key', async () => {
+  const f = fixture(), reference = `sam-session:${'a'.repeat(32)}`
+  f.remote[reference] = [item()]
+  f.api.startSession = async input => {
+    assert.equal(input.resume, true)
+    return { result: { authKey: reference, sessionId: 'a'.repeat(32), user: { _id: 'A', email: 'a@example.com' }, origin: 'password', persistent: true } }
+  }
+  f.api.loadSessionWorkspace = async key => {
+    assert.equal(key, reference)
+    return { editorStates: { saved: { catalogs: [] } }, recovery: { userId: 'A', addons: [item()] } }
+  }
+  const connected = await f.manager.connect({ resume: true })
+  assert.equal(connected.authKey, reference)
+  assert.equal(connected.origin, 'password')
+  assert.deepEqual(f.state.baselineEditorStates, { saved: { catalogs: [] } })
+  assert.equal(f.state.recovery.userId, 'A')
+  assert.equal(f.calls.filter(call => call.method === 'logout').length, 0)
+})
+test('anonymous cookie resume is silent, and transient resumed reads never revoke an existing session', async () => {
+  const f = fixture()
+  f.api.startSession = async () => ({ result: null })
+  assert.equal(await f.manager.connect({ resume: true }), null)
+  assert.equal(f.state.phase, 'signedOut')
+  assert.deepEqual(f.notices, [])
+  f.api.startSession = async () => ({ result: { authKey: 'A', user: { _id: 'A', email: 'a@example.com' } } })
+  f.api.getAddonCollection = async () => { throw new Error('Temporary outage') }
+  await f.manager.connect({ resume: true })
+  assert.match(f.state.error, /Temporary outage/)
+  assert.equal(f.calls.filter(call => call.method === 'logout').length, 0)
+})
+test('a failed newly issued cookie login is revoked through its reference', async () => {
+  const f = fixture()
+  f.api.startSession = async () => ({ result: { authKey: 'A', user: { _id: 'A', email: 'a@example.com' }, newlyIssued: true } })
+  f.api.getAddonCollection = async () => { throw new Error('Temporary outage') }
+  await f.manager.connect({ email: 'a@example.com', password: 'fixture' })
+  assert.deepEqual(f.calls.filter(call => call.method === 'logout'), [{ method: 'logout', key: 'A' }])
+})
 test('transient reload errors preserve credentials and unsynced data', async () => {
   const f = fixture(); await f.manager.connect({ authKey: 'A' })
   f.manager.updateAddons([item('local')])

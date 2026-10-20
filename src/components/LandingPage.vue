@@ -26,8 +26,7 @@ const copyToClipboard = (text) => {
   copy()
 }
 
-const rememberMe = ref(false)
-const rememberPin = ref('')
+const rememberMe = ref(true)
 const unlockPin = ref('')
 const protectedSelection = ref(null)
 const accountNotice = ref('')
@@ -35,7 +34,6 @@ const accountNoticeType = ref('info')
 const isUnlocking = ref(false)
 const selectedAccount = ref(null)
 const unlockedVault = ref(null)
-const vaultPassphrase = ref('')
 let selectionVersion = 0
 
 const setAccountNotice = (message, type = 'info') => {
@@ -46,15 +44,14 @@ const setAccountNotice = (message, type = 'info') => {
 const trimmedPassword = computed(() => password.value)
 const trimmedManualKey = computed(() => manualKey.value.trim())
 const shouldUseAuthKeyLogin = computed(() => trimmedManualKey.value.length > 0 && trimmedPassword.value.length === 0)
+const readySavedAccount = computed(() => selectedAccount.value?.sessionId && !trimmedManualKey.value && !trimmedPassword.value)
 
 const handleAccountSelect = (account) => {
   selectionVersion++
   isUnlocking.value = false
   selectedAccount.value = account
   unlockedVault.value = null
-  vaultPassphrase.value = ''
-  rememberMe.value = false
-  rememberPin.value = ''
+  rememberMe.value = true
   email.value = account.email || ''
   password.value = ''
   unlockPin.value = ''
@@ -65,7 +62,7 @@ const handleAccountSelect = (account) => {
   } else {
     manualKey.value = ''
     protectedSelection.value = null
-    accountNotice.value = account.needsReconnect ? 'Sign in again to save this account securely.' : ''
+    accountNotice.value = account.sessionId ? 'Select Connect Account to continue with this saved account.' : account.needsReconnect ? 'Sign in again to save this account securely.' : ''
   }
 }
 
@@ -80,7 +77,6 @@ const unlockSavedAuthKey = async () => {
     const vault = await decryptSavedSession(account, passphrase)
     if (run !== selectionVersion) return
     unlockedVault.value = vault
-    vaultPassphrase.value = passphrase
     manualKey.value = vault.authKey
     protectedSelection.value = null
     unlockPin.value = ''
@@ -98,15 +94,15 @@ watch(manualKey, value => {
   }
   if (unlockedVault.value && value.trim() !== unlockedVault.value.authKey) {
     unlockedVault.value = null
-    vaultPassphrase.value = ''
   }
 })
 
 const handleLogin = (preferAuthKey = false) => {
   const authKeyLogin = preferAuthKey === true || shouldUseAuthKeyLogin.value
   if (props.isLoading || isUnlocking.value) return
-  if (rememberMe.value && rememberPin.value.length < 8) {
-    setAccountNotice('Choose a passphrase with at least 8 characters to remember this account.', 'error')
+
+  if (readySavedAccount.value) {
+    emit('loginKey', { sessionId: selectedAccount.value.sessionId, expectedUserId: selectedAccount.value.userId, rememberMe: rememberMe.value })
     return
   }
 
@@ -130,8 +126,7 @@ const handleLogin = (preferAuthKey = false) => {
       expectedUserId: unlockedVault.value ? selectedAccount.value?.userId : '',
       editorStates: unlockedVault.value?.editorStates || {},
       recovery: unlockedVault.value?.recovery || null,
-      vaultPassphrase: vaultPassphrase.value,
-      rememberMe: rememberMe.value, rememberPin: rememberPin.value,
+      rememberMe: rememberMe.value,
     })
     return
   }
@@ -145,7 +140,6 @@ const handleLogin = (preferAuthKey = false) => {
     email: email.value,
     password: password.value,
     rememberMe: rememberMe.value,
-    rememberPin: rememberMe.value ? rememberPin.value : ''
   })
 }
 
@@ -216,13 +210,9 @@ watch(width, (value) => {
 
           <label class="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-zinc-800 dark:text-zinc-200">
             <input type="checkbox" v-model="rememberMe" class="h-4 w-4 accent-blue-600" />
-            <span>Remember this account</span>
+            <span>Keep me signed in</span>
           </label>
-          <div v-if="rememberMe" class="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-            <label for="vault-passphrase" class="text-xs font-bold text-zinc-500">Passphrase to unlock</label>
-            <input id="vault-passphrase" v-model="rememberPin" type="password" minlength="8" autocomplete="new-password" class="input-field" placeholder="At least 8 characters" />
-            <p class="text-xs text-zinc-500">Use this passphrase to unlock your saved account next time. Choose at least 8 characters.</p>
-          </div>
+          <p class="text-xs text-zinc-500 dark:text-zinc-400">Stay signed in for up to 30 days. Uncheck this on a shared device. Refreshing keeps your session either way.</p>
 
           <button type="submit" :disabled="isLoading" class="btn-primary w-full mt-2">
             <Loader2 v-if="isLoading" class="w-5 h-5 animate-spin" />
@@ -245,7 +235,7 @@ watch(width, (value) => {
 
         <div class="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-xs leading-relaxed">
           <Shield class="w-4 h-4 mt-0.5 shrink-0" />
-          <p><strong>Security:</strong> Your Stremio password isn’t saved. Remembered accounts are encrypted on this device. Sign-in details pass through this site to Stremio.</p>
+          <p><strong>Security:</strong> Your Stremio password isn’t saved. Your saved sign-in is encrypted. Sign-in details pass through this site to Stremio.</p>
         </div>
 
       </section>
@@ -346,7 +336,7 @@ watch(width, (value) => {
               <ArrowRight class="w-4 h-4 transition-transform group-open:rotate-90 text-zinc-400" />
             </summary>
             <div class="px-3 pb-3 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Your Stremio password is never saved. Remembered accounts are always encrypted and require your chosen passphrase to unlock.
+              Your Stremio password is never saved. Your sign-in key is encrypted in a secure cookie. Keep me signed in lets you return without signing in again for up to 30 days.
             </div>
           </details>
 

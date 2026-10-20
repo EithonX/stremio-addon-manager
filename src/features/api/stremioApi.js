@@ -1,19 +1,43 @@
 import { fetchJson } from './http.js'
 import { validateManifestUrl } from './manifestUrlValidation.js'
 import { validateManifest } from '../addons/manifestSchema.js'
+import { sessionIdFrom } from '../accounts/sessionReference.js'
 
 export function postStremioApi(endpoint, payload, options = {}) {
   return fetchJson(`/api/${endpoint}`, {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify(payload),
   }, options)
 }
 export const loginToStremio = (email, password, options) => postStremioApi('login', { email, password }, options)
-export const getStremioUser = (authKey, options) => postStremioApi('getUser', { type: 'GetUser', authKey }, options)
-export const logoutFromStremio = (authKey, options) => postStremioApi('logout', { type: 'Logout', authKey }, options)
-export const getAddonCollection = (authKey, options) => postStremioApi('addonCollectionGet', { type: 'AddonCollectionGet', authKey, update: false }, options)
-export const setAddonCollection = (authKey, addons, options) => postStremioApi('addonCollectionSet', { type: 'AddonCollectionSet', authKey, addons }, options)
+const credential = authKey => sessionIdFrom(authKey) ? { sessionId: sessionIdFrom(authKey) } : { authKey }
+export const getStremioUser = (authKey, options) => postStremioApi('getUser', { ...credential(authKey) }, options)
+export const logoutFromStremio = (authKey, options) => postStremioApi('logout', { ...credential(authKey) }, options)
+export const getAddonCollection = (authKey, options) => postStremioApi('addonCollectionGet', { ...credential(authKey) }, options)
+export const setAddonCollection = (authKey, addons, options) => postStremioApi('addonCollectionSet', { ...credential(authKey), addons }, options)
+
+export function startSession(input, options) {
+  const sessionId = input.sessionId || sessionIdFrom(input.authKey)
+  return postStremioApi('session', input.resume || sessionId
+    ? { action: 'resume', sessionId, expectedUserId: input.expectedUserId, persistent: input.rememberMe }
+    : { action: 'create', email: input.email, password: input.password, authKey: input.authKey, expectedUserId: input.expectedUserId, persistent: input.rememberMe !== false }, options)
+}
+export const disconnectBrowserSession = authKey => postStremioApi('session', { action: 'disconnect', sessionId: sessionIdFrom(authKey) })
+export const forgetBrowserSession = sessionId => postStremioApi('session', { action: 'forget', sessionId })
+const workspaceKey = authKey => `sam_workspace_${sessionIdFrom(authKey)}`
+export async function loadSessionWorkspace(authKey, options) {
+  let ciphertext
+  try { ciphertext = localStorage.getItem(workspaceKey(authKey)) }
+  catch { return null }
+  if (!ciphertext) return null
+  return (await postStremioApi('sessionWorkspace', { action: 'open', sessionId: sessionIdFrom(authKey), ciphertext }, { ...options, maxBytes: 6 * 1024 * 1024 })).result
+}
+export async function saveSessionWorkspace(authKey, workspace, options = {}) {
+  const response = await postStremioApi('sessionWorkspace', { action: 'seal', sessionId: sessionIdFrom(authKey), workspace }, { ...options, maxBytes: 6 * 1024 * 1024 })
+  if (!options.isCurrent || options.isCurrent()) localStorage.setItem(workspaceKey(authKey), response.result.ciphertext)
+}
 
 export async function fetchAddonManifest(manifestUrl, options = {}) {
   const validation = validateManifestUrl(manifestUrl)

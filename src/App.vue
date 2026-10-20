@@ -7,96 +7,93 @@ import ManagerDashboard from './components/ManagerDashboard.vue'
 import Footer from './components/Footer.vue'
 import Modal from './components/ui/Modal.vue'
 import ConfirmationModal from './components/ui/ConfirmationModal.vue'
-import { encryptSavedSession, hashAuthKey } from './utils/cryptoVault.js'
+import { hashAuthKey } from './utils/cryptoVault.js'
 import * as api from './features/api/stremioApi.js'
 import { initialManagerState, createManagerController } from './features/accounts/managerController.js'
 import { collectionChanges } from './features/addons/collectionSync.js'
 import { committedManifestDrafts } from './features/addons/manifestDraft.js'
 import { useSavedAccounts } from './features/accounts/useSavedAccounts.js'
 import { useNotification } from './composables/useNotification.js'
+import { readActiveSession, selectActiveSession } from './features/accounts/activeSession.js'
 
 const state = reactive(initialManagerState())
 const { savedAccounts, ensureNormalized, upsertSavedAccount, invalidateSavedKey } = useSavedAccounts()
 const { notification, notify } = useNotification()
-let vaultSession = null
 let activeConnection = null
-let vaultWrite = 0
+let workspaceWrite = 0
 let persistTimer = null
-const savingVault = ref(false)
+const savingSettings = ref(false)
 const editorDirty = ref(false)
-const vaultError = ref('')
+const settingsError = ref('')
 const reviewOpen = ref(false)
 const confirmationModal = ref({ show: false, title: '', message: '', confirmText: '', type: 'danger', action: null })
 let migratedActive = false
 try {
   migratedActive = Boolean(window.localStorage.getItem('stremio_auth_key'))
   window.localStorage.removeItem('stremio_auth_key')
-} catch { /* Session credentials still stay in memory when storage is unavailable. */ }
+} catch { /* Browser storage may be unavailable. */ }
 const migration = ensureNormalized()
 
-async function persistVault({ create = false } = {}) {
-  const session = vaultSession
-  if (!session?.connection.isCurrent()) return
-  const existing = savedAccounts.value.find(account => account.email.toLowerCase() === session.email.toLowerCase())
-  if (!create && !session.allowCreate && existing?.authKeyHash !== session.hash) return
-  const run = ++vaultWrite
-  savingVault.value = true
+async function persistWorkspace() {
+  const connection = activeConnection
+  if (!connection?.isCurrent()) return
+  const run = ++workspaceWrite
+  savingSettings.value = true
   try {
-    const encrypted = await encryptSavedSession(session.connection.authKey, session.passphrase, {
-      editorStates: state.baselineEditorStates, recovery: state.recovery, allowLegacyPin: session.legacy,
-    })
-    if (run !== vaultWrite || vaultSession !== session || !session.connection.isCurrent()) return
-    upsertSavedAccount({ ...encrypted, email: session.email, userId: session.connection.user.id, origin: session.connection.origin, label: existing?.label || session.email, authKeyHash: session.hash, updatedAt: Date.now() })
-    session.allowCreate = false
-    vaultError.value = ''
+    await api.saveSessionWorkspace(connection.authKey, { editorStates: state.baselineEditorStates, recovery: state.recovery }, { signal: connection.signal, isCurrent: () => run === workspaceWrite && connection.isCurrent() })
+    if (run !== workspaceWrite || !connection.isCurrent()) return
+    settingsError.value = ''
   } catch (error) {
-    if (run === vaultWrite && vaultSession === session) vaultError.value = 'Couldn’t save your account settings on this device. Download a backup before closing this page.'
+    if (run === workspaceWrite && connection.isCurrent()) settingsError.value = 'Couldn’t save your account settings on this device. Download a backup before closing this page.'
     throw error
-  } finally { if (run === vaultWrite) savingVault.value = false }
+  } finally { if (run === workspaceWrite) savingSettings.value = false }
 }
 const controller = createManagerController({ state, api, notice: notify, beforeWrite: async () => {
-  try { await persistVault() } catch { /* The exact recovery remains in this tab and the persistent vault warning is shown. */ }
+  try { await persistWorkspace() } catch { /* Recovery remains available in this tab and a persistent warning is shown. */ }
 } })
 const step = computed(() => state.phase === 'ready' ? 2 : 1)
 const addons = computed(() => state.addons)
-const isLoading = computed(() => Boolean(state.busy) || savingVault.value)
+const isLoading = computed(() => Boolean(state.busy))
 const currentUserEmail = computed(() => state.user?.email || '')
 const hasUnsyncedChanges = computed(() => step.value === 2 && controller.isDirty())
 const changes = computed(() => collectionChanges(state.baseline, state.addons))
 
-function clearVaultSession() {
+function clearActiveConnection() {
   clearTimeout(persistTimer)
-  vaultWrite++
-  vaultSession = null
+  workspaceWrite++
   activeConnection = null
-  savingVault.value = false
-  vaultError.value = ''
+  savingSettings.value = false
+  settingsError.value = ''
 }
 async function connect(input) {
-  if (input.rememberMe && (!input.rememberPin || input.rememberPin.length < 8)) {
-    notify('error', 'Choose a saved-account password with at least 8 characters.'); return
-  }
-  clearVaultSession()
+  clearActiveConnection()
   editorDirty.value = false
   const connection = await controller.connect(input)
   if (!connection) return
   activeConnection = connection
-  const passphrase = input.rememberMe ? input.rememberPin : input.vaultPassphrase || ''
-  if (!passphrase) return
-  const hash = await hashAuthKey(connection.authKey)
-  if (!connection.isCurrent()) return
-  vaultSession = { connection, email: connection.user.email, passphrase, hash, legacy: Boolean(input.vaultPassphrase) && !input.rememberMe, allowCreate: Boolean(input.rememberMe) }
-  try { await persistVault({ create: Boolean(input.rememberMe) }) }
-  catch { notify('error', 'Connected, but couldn’t remember this account. Download a backup before closing.') }
+  selectActiveSession(connection.sessionId)
+  try {
+    if (connection.persistent) {
+      const existing = savedAccounts.value.find(account => account.email.toLowerCase() === connection.user.email.toLowerCase())
+      upsertSavedAccount({ email: connection.user.email, userId: connection.user.id, origin: connection.origin, label: existing?.label || connection.user.email, sessionId: connection.sessionId, expiresAt: connection.expiresAt, authKeyHash: connection.authKeyHash, updatedAt: Date.now() })
+    }
+    await persistWorkspace()
+  } catch { notify('error', 'Connected, but couldn’t save your account settings. Download a backup before closing.') }
 }
 const login = input => connect(input)
 const loginKey = input => connect(typeof input === 'string' ? { authKey: input } : input)
-function performDisconnect() {
-  clearVaultSession()
+async function performDisconnect() {
+  const connection = activeConnection
+  selectActiveSession('')
+  clearActiveConnection()
   controller.disconnect()
   editorDirty.value = false
   reviewOpen.value = false
   notify('success', 'Disconnected. You can now choose another account.')
+  if (connection) {
+    try { await api.disconnectBrowserSession(connection.authKey) }
+    catch { notify('error', 'Disconnected in this tab. Couldn’t update the saved sign-in; reconnect before leaving a shared device.') }
+  }
 }
 function requestDisconnect() {
   if (!hasUnsyncedChanges.value && !editorDirty.value) { performDisconnect(); return }
@@ -104,14 +101,24 @@ function requestDisconnect() {
 }
 async function performRevoke(connection) {
   if (!connection?.isCurrent()) return
-  let hash = ''
-  try { hash = await hashAuthKey(connection.authKey) } catch { /* Revocation must still proceed. */ }
+  let hash = connection.authKeyHash || ''
+  try { hash ||= await hashAuthKey(connection.authKey) } catch { /* Revocation must still proceed. */ }
   if (!connection.isCurrent()) return
-  clearVaultSession()
-  try { if (hash) invalidateSavedKey(hash) } catch { notify('error', 'Couldn’t remove the saved account. We’ll still try to sign out of Stremio.') }
+  clearActiveConnection()
+  selectActiveSession('')
   editorDirty.value = false
   reviewOpen.value = false
-  await controller.revoke()
+  const revoked = await controller.revoke()
+  if (revoked) {
+    try {
+      if (hash) invalidateSavedKey(hash)
+      localStorage.removeItem(`sam_workspace_${connection.sessionId}`)
+    } catch { notify('error', 'Signed out of Stremio, but couldn’t remove the saved account name from this browser.') }
+  } else {
+    // Keep the credential available for an explicit retry, rather than deleting
+    // it while the Stremio session might still be live.
+    try { await api.disconnectBrowserSession(connection.authKey) } catch { /* The current tab remains disconnected. */ }
+  }
 }
 function logout() {
   const connection = activeConnection
@@ -119,7 +126,7 @@ function logout() {
   const shared = connection.origin !== 'password'
   showConfirmation({
     title: 'Sign out of Stremio?',
-    message: `${shared ? 'This AuthKey came from another Stremio app. Signing out will end that session there too. ' : ''}You’ll need to sign in again on this device. ${hasUnsyncedChanges.value || editorDirty.value ? 'Unsynced changes will be lost. ' : ''}To keep your Stremio session, choose Switch account instead.`,
+    message: `${shared ? 'This AuthKey came from another Stremio app. Signing out will end that session there too. ' : ''}This ends your Stremio session and removes this saved login from the manager. ${hasUnsyncedChanges.value || editorDirty.value ? 'Unsynced changes will be lost. ' : ''}To keep your saved login, choose Switch account instead.`,
     confirmText: 'Sign out of Stremio', action: () => performRevoke(connection),
   })
 }
@@ -137,7 +144,7 @@ async function confirmSync() {
   if (isLoading.value) return
   reviewOpen.value = false
   await controller.sync()
-  try { await persistVault() } catch { notify('error', 'Couldn’t save your account settings. Download a backup before closing.') }
+  try { await persistWorkspace() } catch { notify('error', 'Couldn’t save your account settings. Download a backup before closing.') }
 }
 function updateEditorStates(value) {
   state.editorStates = value
@@ -145,18 +152,21 @@ function updateEditorStates(value) {
 }
 watch(() => [state.baselineEditorStates, state.recovery], () => {
   clearTimeout(persistTimer)
-  if (vaultSession) persistTimer = setTimeout(() => { persistVault().catch(() => notify('error', 'Couldn’t save your settings on this device. Download a backup to keep them.')) }, 500)
+  persistTimer = null
+  if (activeConnection) persistTimer = setTimeout(() => { persistTimer = null; persistWorkspace().catch(() => notify('error', 'Couldn’t save your settings on this device. Download a backup to keep them.')) }, 500)
 }, { deep: true })
 function handleBeforeUnload(event) {
-  if (!hasUnsyncedChanges.value && !editorDirty.value && !state.busy) return
+  if (!hasUnsyncedChanges.value && !editorDirty.value && !state.busy && !savingSettings.value && !persistTimer) return
   event.preventDefault(); event.returnValue = ''
 }
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('beforeunload', handleBeforeUnload)
   if (migration.storageError) notify('error', migration.storageError, 10000)
   else if (migratedActive || migration.removedPlaintext) notify('success', 'Sign in again to save your account securely on this device.', 10000)
+  const selected = readActiveSession()
+  if (selected !== '') await connect({ resume: true, sessionId: selected || undefined })
 })
-onUnmounted(() => { window.removeEventListener('beforeunload', handleBeforeUnload); clearVaultSession(); controller.disconnect() })
+onUnmounted(() => { window.removeEventListener('beforeunload', handleBeforeUnload); clearActiveConnection(); controller.disconnect() })
 </script>
 
 <template>
@@ -172,7 +182,7 @@ onUnmounted(() => { window.removeEventListener('beforeunload', handleBeforeUnloa
         </div>
       </transition>
 
-      <div v-if="vaultError" role="alert" class="mx-auto mt-4 max-w-5xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{{ vaultError }}</div>
+      <div v-if="settingsError" role="alert" class="mx-auto mt-4 max-w-5xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{{ settingsError }}</div>
       <div v-if="state.error" role="alert" class="mx-auto mt-4 flex max-w-5xl items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
         <span>{{ state.error }}</span><button type="button" aria-label="Dismiss error" @click="state.error = ''">Dismiss</button>
       </div>

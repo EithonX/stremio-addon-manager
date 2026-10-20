@@ -2,6 +2,14 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply antialiased transition-colors duration-300;
     @apply bg-zinc-50 text-zinc-900 text-sm md:text-base leading-relaxed;
@@ -11,11 +19,20 @@
   .dark body {
     @apply bg-zinc-950 text-zinc-100;
   }
+
+  :where(button, a, summary, [role="button"], input, textarea, select):focus-visible {
+    outline: 2px solid var(--color-blue-500);
+    outline-offset: 3px;
+  }
+
+  :where(button, summary, a) {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @layer components {
   .card-base {
-    @apply bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors;
+    @apply bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors;
   }
 
   .input-field {
@@ -23,7 +40,7 @@
   }
 
   .btn-primary {
-    @apply h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm md:text-base shadow-sm active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
+    @apply h-12 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
   }
 
   .reorder-card {
@@ -98,6 +115,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
   .reorder-card,
   .reorder-list-move,
   .reorder-list-enter-active,

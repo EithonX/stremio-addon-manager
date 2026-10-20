@@ -8,7 +8,7 @@ export function initialManagerState() {
 
 function verifiedUser(user) {
   const id = user?._id || user?.id
-  if (typeof id !== 'string' || !id || typeof user?.email !== 'string' || !user.email) throw new Error('Stremio did not return a valid account identity.')
+  if (typeof id !== 'string' || !id || typeof user?.email !== 'string' || !user.email) throw new Error('Couldn’t verify this Stremio account. Try signing in again.')
   return { id, email: user.email }
 }
 
@@ -52,10 +52,10 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
         origin = 'password'
         ownsNewSession = true
       }
-      if (typeof key !== 'string' || !key) throw new Error('Stremio did not return an AuthKey.')
+      if (typeof key !== 'string' || !key) throw new Error('Stremio didn’t finish signing you in. Try again.')
       if (!user) user = (await api.getStremioUser(key, { signal: abort.signal })).result
       user = verifiedUser(user)
-      if (input.expectedUserId && input.expectedUserId !== user.id) throw new Error('This saved key does not match its account. Reconnect explicitly.')
+      if (input.expectedUserId && input.expectedUserId !== user.id) throw new Error('This saved account does not match the Stremio account. Sign in again.')
       const response = await api.getAddonCollection(key, { signal: abort.signal })
       const collection = validatedCollection(response.result?.addons)
       if (run !== generation || abort.signal.aborted) return null
@@ -103,7 +103,7 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
   async function reload({ discard = false } = {}) {
     const ctx = context
     if (!ctx || state.busy) return false
-    if (isDirty() && !discard) { report(new Error('Review or back up your unsynced changes before reloading.')); return false }
+    if (isDirty() && !discard) { report(new Error('Back up your unsynced changes before reloading.')); return false }
     const request = ++loadSequence
     const draftAtStart = stableSnapshot(state.addons)
     state.busy = 'reload'
@@ -119,7 +119,7 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
       state.conflict = null
       state.uncertainWrite = false
       lastAttempt = null
-      notice('success', 'Addon collection reloaded.')
+      notice('success', 'Your Stremio addons are up to date.')
       return true
     } catch (error) { if (isCurrent(ctx)) report(error); return false }
     finally { if (isCurrent(ctx) && request === loadSequence) state.busy = '' }
@@ -146,14 +146,14 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
       }
       if (stableSnapshot(remote) !== stableSnapshot(state.baseline)) {
         state.conflict = { remote, changes: collectionChanges(state.baseline, remote), conflicts: [] }
-        notice('error', 'Stremio changed elsewhere. Merge or reload before syncing.')
+        notice('error', 'Your addons changed on another device. Combine the changes or reload before syncing.')
         return false
       }
       if (stableSnapshot(remote) === stableSnapshot(submitted)) {
         state.baseline = deepClone(remote)
         state.uncertainWrite = false
         lastAttempt = null
-        notice('success', 'The submitted addon collection is already on Stremio.')
+        notice('success', 'Your changes are already saved on Stremio.')
         return true
       }
       state.recovery = { formatVersion: 2, createdAt: new Date().toISOString(), userId: ctx.user.id, email: ctx.user.email, addons: deepClone(remote), editorStates: deepClone(state.baselineEditorStates) }
@@ -163,25 +163,25 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
       writeStarted = true
       const response = await api.setAddonCollection(ctx.key, submitted, options(ctx))
       if (!isCurrent(ctx)) return false
-      if (response.result?.success !== true) throw new Error('Stremio did not acknowledge the sync.')
+      if (response.result?.success !== true) throw new Error('Stremio didn’t confirm the sync.')
       const verification = await api.getAddonCollection(ctx.key, options(ctx))
       const verified = validatedCollection(verification.result?.addons)
       if (!isCurrent(ctx)) return false
       if (stableSnapshot(verified) !== stableSnapshot(submitted)) {
         state.conflict = { remote: verified, changes: collectionChanges(submitted, verified), conflicts: [] }
-        throw new Error('The server collection differs from the submitted list. Your draft and recovery backup have been kept.')
+        throw new Error('Stremio returned a different addon list. Your changes and previous list are still available.')
       }
       // Crucially, later local edits are not used as the synced baseline.
       state.baseline = deepClone(submitted)
       state.baselineEditorStates = submittedEditorStates
       state.uncertainWrite = false
       lastAttempt = null
-      notice('success', isDirty() ? 'Submitted changes synced. Newer edits still need syncing.' : 'Addon collection synced and verified.')
+      notice('success', isDirty() ? 'Synced. You still have newer changes to sync.' : 'Changes synced to Stremio.')
       return true
     } catch (error) {
       if (isCurrent(ctx)) {
         state.uncertainWrite = writeStarted
-        report(writeStarted ? new Error(`${error.message} The write was not verified; check Stremio before replacing anything.`) : error)
+        report(writeStarted ? new Error(`${error.message} We couldn’t confirm the sync. Check Stremio before trying again.`) : error)
       }
       return false
     } finally { if (isCurrent(ctx)) state.busy = '' }
@@ -194,14 +194,14 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
       const result = mergeCollections(state.baseline, state.addons, remote)
       if (result.conflicts.length) {
         state.conflict.conflicts = result.conflicts
-        throw new Error('Some changes overlap. Download your draft, then reload or resolve the overlapping addons before syncing.')
+        throw new Error('Some addons were changed in both places. Download your changes before reloading or editing those addons again.')
       }
       state.baseline = deepClone(remote)
       state.addons = result.addons
       state.conflict = null
       state.uncertainWrite = false
       lastAttempt = null
-      notice('success', 'Remote changes merged. Review the list and sync again.')
+      notice('success', 'Changes combined. Review the list, then sync.')
       return true
     } catch (error) { report(error); return false }
   }
@@ -214,11 +214,11 @@ export function createManagerController({ state, api, notice = () => {}, beforeW
     state.busy = 'revoke'
     try {
       const result = await api.logoutFromStremio(ctx.key)
-      if (result.result?.success !== true) throw new Error('Stremio did not confirm session revocation.')
-      if (generation === run) notice('success', 'Signed out. Stremio confirmed session revocation.')
+      if (result.result?.success !== true) throw new Error('Stremio didn’t confirm the sign-out.')
+      if (generation === run) notice('success', 'Signed out of Stremio.')
       return true
     } catch (error) {
-      if (generation === run) report(new Error(`Disconnected locally, but server revocation could not be confirmed: ${error.message}`))
+      if (generation === run) report(new Error(`Signed out here, but Stremio sign-out could not be confirmed: ${error.message}`))
       return false
     } finally { if (generation === run) state.busy = '' }
   }

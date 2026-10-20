@@ -48,7 +48,7 @@ test('sign out sends logout with the captured key and clears workspace', async (
   assert.equal(await f.manager.revoke(), true)
   assert.deepEqual(f.calls.find(c => c.method === 'logout'), { method: 'logout', key: 'A' })
   assert.equal(f.state.phase, 'signedOut')
-  assert.ok(f.notices.some(n => n[1].includes('confirmed session revocation')))
+  assert.ok(f.notices.some(n => n[1].includes('Signed out of Stremio.')))
 })
 test('failed revocation reports local disconnect without claiming server success', async () => {
   const f = fixture(); await f.manager.connect({ authKey: 'A' })

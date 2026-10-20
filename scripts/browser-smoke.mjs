@@ -24,18 +24,18 @@ const descriptor = (id, name, resources, items) => ({ transportUrl: `https://pro
 const source = [descriptor('a', 'Fixture A', ['catalog', 'meta', 'stream'], catalogs), descriptor('b', 'Fixture B', ['stream'], [])]
 async function visibleButton(page, name) { return page.getByRole('button', { name, exact: true }).filter({ visible: true }) }
 async function editFirst(page) {
-  await page.getByRole('button', { name: 'Edit manifest', exact: true }).first().click()
-  const dialog = page.getByRole('dialog', { name: 'Edit manifest', exact: true })
+  await page.getByRole('button', { name: 'Edit addon', exact: true }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Edit addon', exact: true })
   await dialog.waitFor()
   return dialog
 }
 async function closeSaved(dialog) {
-  await dialog.getByRole('button', { name: 'Save Changes', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
 }
 async function backup(page) {
   const pending = page.waitForEvent('download')
-  await (await visibleButton(page, 'Backup configuration')).click()
+  await (await visibleButton(page, 'Download backup')).click()
   const download = await pending
   return JSON.parse(await readFile(await download.path(), 'utf8'))
 }
@@ -43,12 +43,41 @@ async function sync(page) {
   await page.getByRole('button', { name: 'Review sync', exact: true }).click()
   const review = page.getByRole('dialog', { name: 'Review sync', exact: true })
   await review.waitFor()
+  await capture(page, 'review')
   assert.match(await review.innerText(), /alpha@example.com/)
-  await review.getByRole('button', { name: 'Sync reviewed changes', exact: true }).click()
+  await review.getByRole('button', { name: 'Sync to Stremio', exact: true }).click()
   await review.waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: 'Synced', exact: true }).waitFor()
 }
 
+let currentCase = ''
+async function capture(page, name) {
+  if (!output) return
+  await mkdir(output, { recursive: true })
+  await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"]')].every(dialog => { const panel = dialog.querySelector('[tabindex="-1"]'); return !panel || getComputedStyle(panel).opacity === '1' }))
+  await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))))
+  await page.screenshot({ path: resolve(output, `${currentCase}-${name}.png`), fullPage: true })
+}
+async function readableRemember(page, theme) {
+  const result = await page.locator('label').filter({ hasText: 'Remember this account' }).evaluate(label => {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    const rgb = value => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = value; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data] }
+    const blend = (fg, bg) => fg.slice(0, 3).map((v, i) => v * fg[3] / 255 + bg[i] * (1 - fg[3] / 255))
+    let bg = [255, 255, 255]
+    const parents = []
+    for (let node = label; node; node = node.parentElement) parents.unshift(node)
+    for (const node of parents) bg = blend(rgb(getComputedStyle(node).backgroundColor), bg)
+    const fg = blend(rgb(getComputedStyle(label).color), bg)
+    const luminance = c => c.map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0)
+    const values = [luminance(fg), luminance(bg)].sort((a, b) => b - a)
+    return { contrast: (values[0] + 0.05) / (values[1] + 0.05), scheme: getComputedStyle(document.documentElement).colorScheme }
+  })
+  assert.ok(result.contrast >= 4.5, `${currentCase}: remember label contrast ${result.contrast}`)
+  assert.equal(result.scheme, theme)
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${currentCase}: landing overflow`)
+}
 let preview
 let diagnosticPage, diagnosticErrors
 try {
@@ -65,8 +94,9 @@ try {
     }
     if (!ready) throw new Error('Could not start preview. Run npm run build first.')
   }
-  for (const mode of ['desktop', 'mobile']) {
-    const context = await browser.newContext({ viewport: mode === 'desktop' ? { width: 1280, height: 900 } : { width: 360, height: 800 }, isMobile: mode === 'mobile', hasTouch: mode === 'mobile', permissions: ['clipboard-read', 'clipboard-write'] })
+  for (const mode of ['desktop', 'mobile']) for (const theme of ['light', 'dark']) {
+    currentCase = `${mode}-${theme}`
+    const context = await browser.newContext({ colorScheme: theme, viewport: mode === 'desktop' ? { width: 1280, height: 900 } : { width: 360, height: 800 }, isMobile: mode === 'mobile', hasTouch: mode === 'mobile', permissions: ['clipboard-read', 'clipboard-write'] })
     const remote = { 'fixture-key-a': copy(source), 'fixture-key-b': [descriptor('other', 'Other account addon', ['stream'], [])] }
     const writes = [], revocations = [], errors = []
     let failReads = false
@@ -104,31 +134,46 @@ try {
     diagnosticPage = page; diagnosticErrors = errors
     page.on('pageerror', error => errors.push(error.message))
     await page.goto(baseUrl)
+    await page.getByRole('button', { name: 'Connect account', exact: true }).waitFor()
+    await readableRemember(page, theme)
+    const otherTheme = theme === 'dark' ? 'light' : 'dark'
+    await page.getByRole('button', { name: `Switch to ${otherTheme} mode`, exact: true }).click()
+    await readableRemember(page, otherTheme)
+    await page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true }).click()
+    await readableRemember(page, theme)
+    await capture(page, 'sign-in')
     await page.evaluate(() => {
       localStorage.setItem('stremio_auth_key', 'legacy-active-fixture')
       localStorage.setItem('sam_saved_accounts', JSON.stringify([{ email: 'legacy@example.com', label: 'Legacy', authKey: 'legacy-saved-fixture', password: 'legacy-password-fixture' }]))
     })
     await page.reload()
-    await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Connect account', exact: true }).waitFor()
     assert.equal(await page.evaluate(() => localStorage.getItem('stremio_auth_key')), null)
     assert.ok(!(await page.evaluate(() => localStorage.getItem('sam_saved_accounts'))).includes('legacy-saved-fixture'))
+    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click()
     await page.getByLabel('Email', { exact: true }).fill('alpha@example.com')
-    await page.getByLabel('Password', { exact: true }).fill('fixture-password')
-    await page.getByLabel('Remember this account with encryption', { exact: true }).check()
-    await page.getByLabel('Vault passphrase', { exact: true }).fill('fixture-passphrase-123')
-    await page.getByRole('button', { name: 'Connect Account', exact: true }).click()
+    await page.getByLabel('Stremio password', { exact: true }).fill('fixture-password')
+    await page.getByLabel('Remember this account', { exact: true }).check()
+    await page.getByLabel('Saved-account password', { exact: true }).fill('fixture-passphrase-123')
+    await readableRemember(page, theme)
+    await capture(page, 'remember')
+    await page.getByRole('button', { name: 'Connect account', exact: true }).click()
     await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('sam_saved_accounts') || '[]').some(a => a.email === 'alpha@example.com' && a.vaultVersion === 2))
     assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('fixture-key-a'))
 
+    await page.getByRole('button', { name: 'Copy addon link', exact: true }).first().click()
+    await page.locator('button[title="Link copied"]').first().waitFor()
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), source[0].transportUrl)
     let editor = await editFirst(page)
+    await capture(page, 'editor')
     assert.equal(await page.evaluate(() => document.getElementById('app').inert), true)
     await editor.getByRole('button', { name: 'JSON', exact: true }).click()
     const textarea = editor.getByLabel('Manifest source JSON', { exact: true })
     const original = JSON.parse(await textarea.inputValue())
     const invalid = copy(original); delete invalid.id
     await textarea.fill(JSON.stringify(invalid, null, 2))
-    await editor.getByRole('button', { name: 'Save Changes', exact: true }).click()
+    await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
     await editor.getByRole('alert').waitFor()
     assert.match(await editor.getByRole('alert').innerText(), /manifest.id/)
     const renamed = { ...original, name: 'Edited A' }
@@ -139,11 +184,11 @@ try {
     await closeSaved(editor)
 
     editor = await editFirst(page)
-    await editor.getByRole('switch', { name: 'Search support', exact: true }).click()
+    await editor.getByRole('switch', { name: 'Search', exact: true }).click()
     await closeSaved(editor)
     editor = await editFirst(page)
-    assert.equal(await editor.getByRole('switch', { name: 'Search support', exact: true }).getAttribute('aria-checked'), 'false')
-    for (const name of ['Search support', 'Home catalogs', 'Search support', 'Home catalogs', 'Search support']) await editor.getByRole('switch', { name, exact: true }).click()
+    assert.equal(await editor.getByRole('switch', { name: 'Search', exact: true }).getAttribute('aria-checked'), 'false')
+    for (const name of ['Search', 'Home rows', 'Search', 'Home rows', 'Search']) await editor.getByRole('switch', { name, exact: true }).click()
     await closeSaved(editor)
     const exported = await backup(page)
     assert.deepEqual(exported.addons[0].manifest.catalogs, source[0].manifest.catalogs)
@@ -156,6 +201,19 @@ try {
     await page.keyboard.press('Escape')
     const discard = page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true })
     await discard.waitFor()
+    assert.equal(await discard.getByRole('heading', { name: 'Discard unsaved changes?', exact: true }).count(), 1)
+    const discardTitle = await discard.getAttribute('aria-labelledby')
+    await page.waitForFunction(id => {
+      const panel = document.getElementById(id)?.closest('[tabindex="-1"]')
+      const dialog = panel?.closest('[role="dialog"]')
+      return panel && getComputedStyle(panel).opacity === '1' && !dialog.inert && getComputedStyle(dialog).pointerEvents !== 'none'
+    }, discardTitle)
+    await capture(page, 'confirmation')
+    assert.equal(await discard.evaluate(dialog => {
+      const button = dialog.querySelector('button[aria-label="Close dialog"]')
+      const rect = button.getBoundingClientRect()
+      return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.closest('[role="dialog"]') === dialog
+    }), true, `${currentCase}: confirmation is behind another dialog`)
     await page.keyboard.press('Escape')
     await discard.waitFor({ state: 'hidden' })
     assert.equal(await editor.isVisible(), true)
@@ -169,22 +227,24 @@ try {
     assert.equal(writes.length, 1)
     assert.equal(writes[0].authKey, 'fixture-key-a')
     assert.equal(remote['fixture-key-a'][0].manifest.name, 'Edited A')
-    await page.getByRole('button', { name: 'Download recovery backup', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Download previous list', exact: true }).waitFor()
 
     // Duplicate URLs offer replacement instead of appending a second install.
-    await page.locator('button[title="Add New Addon"]:visible').click()
+    await page.locator('button[title="Add addon"]:visible').click()
     let add = page.getByRole('dialog', { name: 'Add addon', exact: true })
+    await add.waitFor()
+    await capture(page, 'add-addon')
     await add.getByPlaceholder('https://example.com/manifest.json', { exact: true }).fill(source[0].transportUrl)
     await add.getByRole('button', { name: 'Add addon', exact: true }).click()
     const replace = page.getByRole('dialog', { name: 'Update existing addon?', exact: true })
     await replace.waitFor(); await replace.getByRole('button', { name: 'Cancel', exact: true }).click()
     await replace.waitFor({ state: 'hidden' })
     assert.equal((await backup(page)).addons.length, 2)
-    await page.locator('button[title="Add New Addon"]:visible').click()
+    await page.locator('button[title="Add addon"]:visible').click()
     add = page.getByRole('dialog', { name: 'Add addon', exact: true })
     await add.getByPlaceholder('https://example.com/manifest.json', { exact: true }).fill('https://provider.example.com/needs-config/manifest.json')
     await add.getByRole('button', { name: 'Add addon', exact: true }).click()
-    await add.getByRole('link', { name: 'Open provider configuration', exact: true }).waitFor()
+    await add.getByRole('link', { name: 'Configure this addon', exact: true }).waitFor()
     await add.getByRole('button', { name: 'Cancel', exact: true }).click()
     await add.waitFor({ state: 'hidden' })
 
@@ -201,8 +261,11 @@ try {
     const other = await context.newPage()
     other.on('pageerror', error => errors.push(error.message))
     await other.goto(baseUrl)
+    await other.getByLabel('Email', { exact: true }).fill('unused@example.com')
+    await other.getByLabel('Stremio password', { exact: true }).fill('unused-password')
+    await other.getByRole('button', { name: 'AuthKey', exact: true }).click()
     await other.getByLabel('Stremio AuthKey', { exact: true }).fill('fixture-key-b')
-    await other.getByRole('button', { name: 'Go', exact: true }).click()
+    await other.getByRole('button', { name: 'Connect account', exact: true }).click()
     await other.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
     await other.evaluate(() => localStorage.setItem('stremio_auth_key', 'fixture-key-b'))
     editor = await editFirst(page)
@@ -214,52 +277,52 @@ try {
 
     if (output) {
       await mkdir(output, { recursive: true })
-      await page.screenshot({ path: resolve(output, `${mode}-dashboard.png`), fullPage: true })
+      await page.screenshot({ path: resolve(output, `${currentCase}-dashboard.png`), fullPage: true })
     }
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${mode}: horizontal overflow`)
 
     // Discarding a staged edit must not replace the remembered restoration
     // source for an already-synced disabled capability.
     editor = await editFirst(page)
-    await editor.getByRole('switch', { name: 'Search support', exact: true }).click()
+    await editor.getByRole('switch', { name: 'Search', exact: true }).click()
     await closeSaved(editor)
     await sync(page)
     editor = await editFirst(page)
     await editor.getByPlaceholder('Addon Name', { exact: true }).fill('Discard this staged edit')
     await closeSaved(editor)
     await page.getByRole('button', { name: 'Account menu', exact: true }).click()
-    await page.getByRole('menuitem', { name: 'Switch Account', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Switch account', exact: true }).click()
     const switchDialog = page.getByRole('dialog', { name: 'Discard local changes?', exact: true })
     await switchDialog.getByRole('button', { name: 'Discard and switch', exact: true }).click()
-    await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Connect account', exact: true }).waitFor()
     await page.reload()
-    await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Connect account', exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: 'Account menu', exact: true }).count(), 0)
     await page.locator('button[aria-haspopup="listbox"]').click()
     await page.getByRole('option').filter({ hasText: 'alpha@example.com' }).click()
-    await page.getByLabel('Saved account PIN or passphrase', { exact: true }).fill('fixture-passphrase-123')
-    await page.getByLabel('Saved account PIN or passphrase', { exact: true }).press('Enter')
-    await page.getByText('Unlocked in this tab. Connect to verify the account with Stremio.', { exact: true }).waitFor()
+    await page.getByLabel('Saved account password or PIN', { exact: true }).fill('fixture-passphrase-123')
+    await page.getByLabel('Saved account password or PIN', { exact: true }).press('Enter')
+    await page.getByText('Account unlocked. Select Connect account to sign in.', { exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: 'Account menu', exact: true }).count(), 0)
-    await page.getByRole('button', { name: 'Go', exact: true }).click()
+    await page.getByRole('button', { name: 'Connect account', exact: true }).click()
     await page.getByRole('button', { name: 'Account menu', exact: true }).waitFor()
     await page.waitForFunction(() => !document.querySelector('button[aria-label="Reload from Stremio"]:disabled'))
     editor = await editFirst(page)
-    assert.equal(await editor.getByRole('switch', { name: 'Search support', exact: true }).getAttribute('aria-checked'), 'false')
-    await editor.getByRole('switch', { name: 'Search support', exact: true }).click()
+    assert.equal(await editor.getByRole('switch', { name: 'Search', exact: true }).getAttribute('aria-checked'), 'false')
+    await editor.getByRole('switch', { name: 'Search', exact: true }).click()
     await closeSaved(editor)
     const restoredSource = await backup(page)
     assert.deepEqual(restoredSource.addons[0].manifest.catalogs, source[0].manifest.catalogs)
     assert.equal(restoredSource.addons[0].manifest.name, 'Edited again in A')
     await page.getByRole('button', { name: 'Account menu', exact: true }).click()
-    await page.getByRole('menuitem', { name: 'Sign out & revoke', exact: true }).click()
-    const revoke = page.getByRole('dialog', { name: 'Sign out and revoke this session?', exact: true })
-    await revoke.getByRole('button', { name: 'Sign out and revoke', exact: true }).click()
-    await page.getByRole('button', { name: 'Connect Account', exact: true }).waitFor()
+    await page.getByRole('menuitem', { name: 'Sign out of Stremio', exact: true }).click()
+    const revoke = page.getByRole('dialog', { name: 'Sign out of Stremio?', exact: true })
+    await revoke.getByRole('button', { name: 'Sign out of Stremio', exact: true }).click()
+    await page.getByRole('button', { name: 'Connect account', exact: true }).waitFor()
     assert.deepEqual(revocations, [{ type: 'Logout', authKey: 'fixture-key-a' }])
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sam_saved_accounts')).find(a => a.email === 'alpha@example.com').authKeyEncrypted ?? null), null)
     assert.deepEqual(errors, [])
-    console.log(`PASS ${mode}: login, encrypted persistence, JSON validation/copy, reversible toggles, nested Escape, review/sync/recovery, duplicate/config checks, transient errors, account isolation and revocation`)
+    console.log(`PASS ${currentCase}: login, encrypted persistence, JSON validation/copy, reversible toggles, nested Escape, review/sync/recovery, duplicate/config checks, transient errors, account isolation and revocation`)
     await context.close()
   }
 } catch (error) {

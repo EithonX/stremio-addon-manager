@@ -226,15 +226,15 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <p v-if="accountError" role="alert" class="text-sm text-red-600">{{ accountError }}</p>
+    <p v-if="accountError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ accountError }}</p>
     <!-- Edit Label Modal/Input (Inline for simplicity) -->
     <div v-if="isEditing" class="mt-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-2.5 dark:border-white/10 dark:bg-zinc-950/40">
       <input 
         v-model="editLabel"
         ref="editInput"
         class="h-9 min-w-0 flex-grow rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus-visible:border-blue-400 focus-visible:ring-4 focus-visible:ring-blue-500/10 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:focus-visible:border-blue-500"
-        placeholder="Account label"
-        @keyup.enter="saveRename"
+        aria-label="Saved account name" placeholder="Account name"
+        @keydown.enter.prevent.stop="saveRename"
         @keyup.esc="isEditing = false"
       />
       <button 

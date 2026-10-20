@@ -1,11 +1,12 @@
 <script>
+import { shallowReactive } from 'vue'
 // Reference-counted body scroll lock shared across ALL Modal instances.
 // Must live in a plain <script> block: <script setup> top-level state is
 // compiled into setup() and would be per-instance, defeating the counter.
 // Nested/overlapping modals stay locked until the last one releases its lock.
 let modalBodyLockCount = 0
 let previousBodyOverflow = ''
-let modalStack = []
+const modalStack = shallowReactive([])
 let nextModalId = 1
 let previousAppInert = false
 
@@ -39,7 +40,8 @@ function registerModal(id) {
 }
 
 function unregisterModal(id) {
-  modalStack = modalStack.filter((modalId) => modalId !== id)
+  const index = modalStack.indexOf(id)
+  if (index !== -1) modalStack.splice(index, 1)
 }
 
 function isTopModal(id) {
@@ -48,7 +50,7 @@ function isTopModal(id) {
 </script>
 
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { X } from '@lucide/vue'
 
 const props = defineProps({
@@ -81,6 +83,8 @@ const isVisible = ref(props.show)
 const contentRef = useTemplateRef('content')
 const panelRef = useTemplateRef('panel')
 const modalId = nextModalId++
+const layer = computed(() => 100 + Math.max(0, modalStack.indexOf(modalId)))
+const isTop = computed(() => isTopModal(modalId))
 const titleId = `sam-dialog-${modalId}`
 let returnFocus = null
 let closeTimerId = null
@@ -167,6 +171,9 @@ const handleKeydown = (e) => {
   if (!props.show || !isTopModal(modalId)) return
   if (e.key === 'Escape' && props.show && isTopModal(modalId)) {
     e.preventDefault()
+    // Opening a confirmation can register another listener during this event.
+    // Consume Escape so that new dialog does not immediately close itself.
+    e.stopImmediatePropagation()
     close()
   }
   if (e.key === 'Tab') {
@@ -194,7 +201,7 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" :aria-labelledby="!noHeader ? titleId : undefined" :aria-label="noHeader ? title || 'Dialog' : undefined">
+    <div v-if="isOpen" class="fixed inset-0 flex items-center justify-center p-4 sm:p-6" :class="{ 'pointer-events-none': !show }" :style="{ zIndex: layer }" :inert="show && !isTop" :aria-hidden="show && !isTop ? true : undefined" role="dialog" aria-modal="true" :aria-labelledby="!noHeader ? titleId : undefined" :aria-label="noHeader ? title || 'Dialog' : undefined">
       <!-- Backdrop -->
       <div class="absolute inset-0 bg-black/30 dark:bg-black/60 backdrop-blur-sm transition-opacity duration-300"
         :class="isVisible ? 'opacity-100' : 'opacity-0'" @click="close"></div>
@@ -203,7 +210,7 @@ onUnmounted(() => {
       <div 
         ref="panel"
         tabindex="-1"
-        class="relative w-full bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl ring-1 ring-zinc-900/5 dark:ring-white/10 flex flex-col max-h-full transition-all duration-300 transform scale-95 opacity-0"
+        class="relative w-full bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 rounded-2xl shadow-2xl ring-1 ring-zinc-900/5 dark:ring-white/10 flex flex-col max-h-full transition-all duration-300 transform scale-95 opacity-0"
         :class="[
           maxWidth, 
           isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
@@ -211,13 +218,13 @@ onUnmounted(() => {
       >
         <!-- Header -->
         <div v-if="!noHeader" class="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-zinc-800">
-          <h3 :id="titleId" class="text-lg font-semibold text-zinc-900 dark:text-white">
+          <h3 :id="titleId" class="min-w-0 text-lg font-semibold text-zinc-900 dark:text-white">
             {{ title || 'Dialog' }}
           </h3>
           <button 
             aria-label="Close dialog"
             @click="close"
-            class="p-2 -mr-2 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            class="shrink-0 p-2 -mr-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X class="w-5 h-5" />
           </button>

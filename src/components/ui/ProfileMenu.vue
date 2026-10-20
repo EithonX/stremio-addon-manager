@@ -87,7 +87,7 @@ onUnmounted(() => { document.removeEventListener('click', handleClickOutside); d
           class="w-full text-left px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-200 flex items-center gap-2 transition-colors"
         >
           <Repeat class="w-4 h-4" />
-          Switch Account
+          Switch account
         </button>
 
         <button 
@@ -96,7 +96,7 @@ onUnmounted(() => { document.removeEventListener('click', handleClickOutside); d
           class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
         >
           <LogOut class="w-4 h-4" />
-          Sign out &amp; revoke
+          Sign out of Stremio
         </button>
       </div>
     </transition>

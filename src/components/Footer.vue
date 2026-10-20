@@ -12,7 +12,7 @@ const repoUrl = 'https://github.com/EithonX/stremio-addon-manager'
       <!-- primary: made by + source -->
       <p class="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">
         Made with
-        <Heart class="h-3.5 w-3.5 animate-heartbeat fill-red-500 text-red-500" aria-label="love" />
+        <Heart class="h-3.5 w-3.5 fill-red-500 text-red-500" aria-label="love" />
         by
         <a
           href="https://github.com/EithonX"
@@ -35,7 +35,7 @@ const repoUrl = 'https://github.com/EithonX/stremio-addon-manager'
       </p>
 
       <!-- secondary: version + attribution -->
-      <p class="flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-600">
+      <p class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
         <span class="font-medium">v{{ appVersion }}</span>
         <span class="text-zinc-300 dark:text-zinc-700">·</span>
         <a
@@ -51,27 +51,3 @@ const repoUrl = 'https://github.com/EithonX/stremio-addon-manager'
     </div>
   </footer>
 </template>
-
-<style scoped>
-@keyframes heartbeat {
-  0%, 100% {
-    transform: scale(1);
-  }
-  15% {
-    transform: scale(1.25);
-  }
-  30% {
-    transform: scale(1);
-  }
-  45% {
-    transform: scale(1.15);
-  }
-  60% {
-    transform: scale(1);
-  }
-}
-
-.animate-heartbeat {
-  animation: heartbeat 2.5s ease-in-out infinite;
-}
-</style>
